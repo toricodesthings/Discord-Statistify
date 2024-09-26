@@ -1,9 +1,11 @@
+#Load required libraries
 import discord
-from dotenv import load_dotenv
 import json
-import asyncio
 import os
 import aiohttp
+from discord.ext import commands
+from dotenv import load_dotenv
+
 #Establish Spotify Web Endpoint
 web_endpoint = "https://api.spotify.com"
 authentication_endpoint = "https://accounts.spotify.com/api/token"
@@ -21,9 +23,10 @@ bot_token = os.getenv("DISCORD_TOKEN")
 spotify_cid = os.getenv("CLIENT_ID")
 spotify_csecret = os.getenv("CLIENT_SECRET")
 bot = discord.Client(intents=discord.Intents.all())
+tree = discord.app_commands.CommandTree(bot)
 
 #Load and Request Token - Spotify Web API
-async def req_token(c_id, c_secret, auth_e):
+async def req_token(auth_e, c_id, c_secret):
     #Set Parameters
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded'
@@ -32,23 +35,20 @@ async def req_token(c_id, c_secret, auth_e):
         'grant_type': 'client_credentials',
         'client_id': c_id,
         'client_secret': c_secret
-        
     }
     try: 
-        async with aiohttp.ClientSession() as s:
-            async with s.post(auth_e, headers = headers, data = data) as response:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(auth_e, headers = headers, data = data) as response:
+                print(response)
                 if response.status == 200:
                     token = response.json()['access_token']
+                    return token, response.status, None
                 else:
-                    print(f"API Endpoint returned code: {response.status}")
+                    print(f"API Endpoint Error. See Spotify API reference page for details.")
+                    return 0, response.status, response
     except Exception as exc:
         print(f"Encountered Unexpected Error: {exc}")
-        
-            
-    return token
-            
-token = req_token(spotify_cid, spotify_csecret, authentication_endpoint)
-
+    
 
 #Report when Bot is Ready and Sync Slash Commands
 @bot.event
@@ -59,10 +59,18 @@ async def on_ready():
     else:
         print("No presaved elements loaded, this might be an error.")
     try:
-        synced = await bot.tree.sync()
+        synced = await tree.sync()
         print(f"Bot has synced {len(synced)} command(s)")
     except Exception as exc:
         print(exc)
+        
+    
+    token, code, response = await req_token(spotify_cid, spotify_csecret, authentication_endpoint)
+    if not token == 0:
+        print(f"Spotify API access granted with token: {token}")
+    else:
+        print(f"Spotify API access error with code: {code}")
+        print(response)
 
 def identify_commands(message):
     parts = message[2:].split()
@@ -89,7 +97,6 @@ async def list_artists(message, author):
         title="Saved Artists",
         description="List of presaved artists (use help find out how to save artists)",
         color=discord.Color.green(),
-        
     )
     
     embed.set_footer(text=f"Called by {author}")
@@ -120,6 +127,12 @@ async def on_message(message):
                     getattr(globals(), command)(author)
             except AttributeError:
                await message.reply(f"The command you entered '{command}' is invalid.")
+
+
+@tree.command(name="ping", description="test command")
+
+async def slash_command(interaction: discord.Interaction):    
+    await interaction.response.send_message("Pong!")
 
 # Run the bot using your bot token
 bot.run(bot_token)
