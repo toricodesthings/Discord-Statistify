@@ -83,15 +83,20 @@ def identify_commands(ctx):
         return command, False
     
 # Help Function
-async def help(message, author):
-    await message.reply("This is the help function.")
+async def help(call_type, author):
+    if isinstance(call_type, discord.Message):
+        await call_type.reply("This is the help function.")
+    else:
+        await call_type.response.send_message(f"This is the help function.")
     
 # Bot Latency Function
-async def ping(message, author):
+async def ping(call_type, author):
     ping = round(bot.latency * 1000, 2)
-    await message.reply(f"Pong! Bot latency is currently `{ping} ms`")
-    
-    
+    bot_msg = f"Pong! Bot latency is currently `{ping} ms`"
+    if isinstance(call_type, discord.Message):
+        await call_type.reply(bot_msg)
+    else:
+        await call_type.response.send_message(bot_msg)
     
 def list_artists(author):
     global presaved_artist
@@ -146,8 +151,8 @@ async def on_message(message):
 
 @tree.command(name="ping", description="test command")
 async def slash_command(interaction: discord.Interaction):    
-    await ping
-    await interaction.response.send_message("Pong!")
+    author = interaction.user
+    await ping(interaction, author)
 
 # Run the bot using your bot token
 bot.run(bot_token)
