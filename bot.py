@@ -3,6 +3,7 @@ import discord
 import json
 import os
 import aiohttp
+import commands as d_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -81,68 +82,31 @@ def identify_commands(ctx):
         return command, params
     else:
         return command, False
-    
-# Help Function
-async def help(call_type, author):
-    if isinstance(call_type, discord.Message):
-        await call_type.reply("This is the help function.")
-    else:
-        await call_type.response.send_message(f"This is the help function.")
-    
-# Bot Latency Function
-async def ping(call_type, author):
-    ping = round(bot.latency * 1000, 2)
-    bot_msg = f"Pong! Bot latency is currently `{ping} ms`"
-    if isinstance(call_type, discord.Message):
-        await call_type.reply(bot_msg)
-    else:
-        await call_type.response.send_message(bot_msg)
-    
-def list_artists(author):
-    global presaved_artist
-    embed = discord.Embed(
-        title="Saved Artists",
-        description="List of presaved artists (use help find out how to save artists)",
-        color=discord.Color.green(),
-    )
-        
-    embed.set_footer(text=f"Called by {author}")
-    artist_list = ""
-    for x in presaved_artist:
-        artist_list += f"{x}\n"
-    embed.add_field(name="Artists", value=artist_list, inline=False)
-    return embed
 
-# List Saved Artists
-async def list(message, author, list_param, *args):
-    if list_param == 'artists':
-        r = list_artists(author)
-        await message.reply(embed=r)
-    else:
-        await message.reply(f"The parameter of the list function `{list_param}` is invalid.")
+
 
 @bot.event
 async def on_message(message):
     #Store Variables
     author = message.author
-    context = message.content.lower()
+    ctx = message.content.lower()
     #Ignore self messages
     if author.bot:
         return
     
     #Command Module
-    if context.startswith("s!"):
-        if len(context) < 3:
+    if ctx.startswith("s!"):
+        if len(ctx) < 3:
             await message.reply("Hello there. If you need help, run /help or s!help")
         else:
-            command, params = identify_commands(context)
+            command, params = identify_commands(ctx)
             try:
-                cmd_func = globals().get(command)
+                cmd_func = globals().get(command) or getattr(__import__('d_commands'), command, None)
                 if cmd_func is not None and callable(cmd_func):
                     if params:
-                        await cmd_func(message, author, *params)
+                        await cmd_func(message, author, bot, *params)
                     else:
-                        await cmd_func(message, author)
+                        await cmd_func(message, author, bot)
                 else:
                     await message.reply(f"The command you entered '{command}' is invalid.")
             except AttributeError:
@@ -152,7 +116,7 @@ async def on_message(message):
 @tree.command(name="ping", description="test command")
 async def slash_command(interaction: discord.Interaction):    
     author = interaction.user
-    await ping(interaction, author)
+    await d_commands.ping(interaction, author, bot)
 
 # Run the bot using your bot token
 bot.run(bot_token)
