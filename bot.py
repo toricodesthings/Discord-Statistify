@@ -1,42 +1,33 @@
 #Load required libraries
-import discord
-import json
-import os
-import aiohttp
-import time
+import discord, json, os, aiohttp, time, inspect
 from datetime import datetime
 import commands as b_commands
-from discord.ext import commands
 from dotenv import load_dotenv
 
 RED = "\033[91m"
 GREEN = "\033[92m"
 LIGHT_BLUE = "\033[94m"
-RESET = "\033[0m"
-
-#Load Presaved Artist into database
-def load_ps_artist():
-    
-    file_path = os.path.join(os.path.dirname(__file__), 'savedartists.json')
-    try:
-        with open(file_path, "r") as file:
-            return json.load(file)
-    except FileNotFoundError:
-        print("savedartists.json not found, make sure it's not deleted.")
-        
+RESET = "\033[0m"        
 
 #Establish Spotify Web Endpoint
 web_endpoint = "https://api.spotify.com"
 auth_endpoint = "https://accounts.spotify.com/api/token"
+access_token = ""
 
 #Load and Request Token - Spotify Web API
 def load_token():
     try:
         file_path = os.path.join(os.path.dirname(__file__), 'accesstoken.json')
         with open(file_path, 'r') as file:
-            return json.load(file)
+            saved_token = json.load(file)
+            if saved_token and saved_token["access_token"] is not None:
+                current_time = int(time.time())
+                if saved_token["expires_at"] is not None and current_time < (saved_token["expires_at"] - 30):
+                    token = saved_token["access_token"]
+                    expiry_time = datetime.fromtimestamp(saved_token["expires_at"]).strftime("%d-%m-%y %H:%M:%S")
+                    return token, expiry_time
     except FileNotFoundError:
-        return None
+        return None, None
     
 def store_token(token, expires_at):
     file_path = os.path.join(os.path.dirname(__file__), 'accesstoken.json')
@@ -49,19 +40,13 @@ def store_token(token, expires_at):
     
 async def req_token(auth_e, c_id, c_secret):
     
-    saved_token = load_token()
-    if saved_token and saved_token["access_token"] is not None:
-        current_time = int(time.time())
-        if saved_token["expires_at"] is not None and current_time < (saved_token["expires_at"] - 30):
-            token = saved_token["access_token"]
-            expiry_time = datetime.fromtimestamp(saved_token["expires_at"]).strftime("%d-%m-%y %H:%M:%S")
-            print(f"{LIGHT_BLUE}Passing on previously generated token\nThis token will expire at {expiry_time}{RESET}")
-            return token, 1, None
+    token, expiry = load_token()    
+    if token and expiry:
+        print(f"{LIGHT_BLUE}Passing on previously generated token\nThis token will expire at {expiry}{RESET}")
+        return token, 1, None
     else:
         print("No token previously generated. Proceed to generation...")
-    
-    
-    
+
     #Set Parameters
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded'
@@ -101,7 +86,7 @@ tree = discord.app_commands.CommandTree(bot)
 @bot.event
 async def on_ready():
     print(f"{GREEN}{bot.user.name} has connected to Discord Successfully!{RESET}")
-    presaved_artist = load_token()
+    presaved_artist = b_commands.load_ps_artist()
     if len(presaved_artist) > 0:
         print(f"{LIGHT_BLUE}Loaded {len(presaved_artist)} saved artists{RESET}")
     else:
@@ -117,6 +102,8 @@ async def on_ready():
     # Start Token Request
     token, code, response = await req_token(auth_endpoint, spotify_cid, spotify_csecret)
     if not token == 0:
+        global access_token
+        access_token = token()
         print(f"{GREEN}Spotify API access granted with token: {token}{RESET}")
     else:
         print(f"{RED}Spotify API access error with code: {code}{RESET}")
@@ -131,16 +118,17 @@ def identify_commands(ctx):
     else:
         return command, False
 
-
-
 @bot.event
 async def on_message(message):
     #Store Variables
     author = message.author
     ctx = message.content.lower()
+    
     #Ignore self messages
     if author.bot:
         return
+    
+    
     
     #Command Module
     if ctx.startswith("s!"):
@@ -149,8 +137,18 @@ async def on_message(message):
         else:
             command, params = identify_commands(ctx)
             try:
-                cmd_func = globals().get(command) or getattr(__import__('b_commands'), command, None)
+                cmd_func = globals().get(command) or getattr(__import__('commands'), command, None)
                 if cmd_func is not None and callable(cmd_func):
+                    func_signature = inspect.signature(cmd_func)
+                    
+                    global access_token
+                    possible_args = {
+                        'message': message,
+                        'author': author,
+                        'bot': bot,
+                        'token': access_token,
+                        'params': params 
+                    }
                     if params:
                         await cmd_func(message, author, bot, *params)
                     else:
@@ -161,10 +159,20 @@ async def on_message(message):
                 await message.reply(f"The command you entered '{command}' is invalid.")
 
 
-@tree.command(name="ping", description="test command")
+@tree.command(name="ping", description="Pings Statisfy")
 async def slash_command(interaction: discord.Interaction):    
     author = interaction.user
     await b_commands.ping(interaction, author, bot)
+
+@tree.command(name="help", description="Access the Help Menu")
+async def slash_command(interaction: discord.Interaction):    
+    author = interaction.user
+    await b_commands.help(interaction, author, bot)
+
+@tree.command(name="list_artist", description="List Saved Artist")
+async def slash_command(interaction: discord.Interaction):    
+    author = interaction.user
+    await b_commands.list(interaction, author, bot, "artists")
 
 # Run the bot using your bot token
 bot.run(bot_token)
