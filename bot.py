@@ -24,6 +24,7 @@ def load_ps_artist():
 web_endpoint = "https://api.spotify.com"
 auth_endpoint = "https://accounts.spotify.com/api/token"
 
+#Load and Request Token - Spotify Web API
 def load_token():
     try:
         file_path = os.path.join(os.path.dirname(__file__), 'accesstoken.json')
@@ -41,18 +42,16 @@ def store_token(token, expires_at):
     with open(file_path, 'w') as file:
         json.dump(token_data, file)
     
-
-#Load and Request Token - Spotify Web API
 async def req_token(auth_e, c_id, c_secret):
     
     print("Checking to see if previous token is expired...")
     saved_token = load_token()
     if saved_token and saved_token["access_token"] is not None:
         current_time = int(time.time())
-        if current_time < (saved_token['expires_at'] - 10) and not saved_token['expires_at'] is None:
+        if saved_token["expires_at"] is not None and current_time < (saved_token["expires_at"] - 10):
             token = saved_token["access_token"]
-            expiry_time = datetime.fromtimestamp(saved_token['expires_at']).strftime('%d-%m-%y %H:%M:%S')
-            print(f"Using previously generated token: {token}\nThis token will expire at {expiry_time}")
+            expiry_time = datetime.fromtimestamp(saved_token["expires_at"]).strftime("%d-%m-%y %H:%M:%S")
+            print(f"Passing on previously generated token\nThis token will expire at {expiry_time}")
             return token, 1, None
     else:
         print("No token previously generated. Proceed to generation...")
@@ -83,8 +82,6 @@ async def req_token(auth_e, c_id, c_secret):
     except Exception as exc:
         print(f"Encountered Unexpected Error: {exc}")
 #-------------------------------------------------------------------------------------------------
-
-
 
 #Load Token and Set Bot Parameters - Discord Application
 load_dotenv()
