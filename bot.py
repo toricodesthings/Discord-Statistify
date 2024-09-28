@@ -9,6 +9,11 @@ import commands as b_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
+RED = "\033[91m"
+GREEN = "\033[92m"
+LIGHT_BLUE = "\033[94m"
+RESET = "\033[0m"
+
 #Load Presaved Artist into database
 def load_ps_artist():
     
@@ -44,18 +49,19 @@ def store_token(token, expires_at):
     
 async def req_token(auth_e, c_id, c_secret):
     
-    print("Checking to see if previous token is expired...")
     saved_token = load_token()
     if saved_token and saved_token["access_token"] is not None:
         current_time = int(time.time())
-        if saved_token["expires_at"] is not None and current_time < (saved_token["expires_at"] - 10):
+        if saved_token["expires_at"] is not None and current_time < (saved_token["expires_at"] - 30):
             token = saved_token["access_token"]
             expiry_time = datetime.fromtimestamp(saved_token["expires_at"]).strftime("%d-%m-%y %H:%M:%S")
-            print(f"Passing on previously generated token\nThis token will expire at {expiry_time}")
+            print(f"{LIGHT_BLUE}Passing on previously generated token\nThis token will expire at {expiry_time}{RESET}")
             return token, 1, None
     else:
         print("No token previously generated. Proceed to generation...")
-        
+    
+    
+    
     #Set Parameters
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded'
@@ -72,7 +78,7 @@ async def req_token(auth_e, c_id, c_secret):
                 if response.status == 200:
                     r = await response.json()
                     token = r['access_token']
-                    expiry = current_time + r['expires_in']
+                    expiry = int(time.time()) + r['expires_in']
                     store_token(token, expiry)
                     return token, response.status, None
                 else:
@@ -94,26 +100,26 @@ tree = discord.app_commands.CommandTree(bot)
 #Report when Bot is Ready and Sync Slash Commands
 @bot.event
 async def on_ready():
-    print(f"{bot.user.name} has connected to Discord Successfully!")
+    print(f"{GREEN}{bot.user.name} has connected to Discord Successfully!{RESET}")
     presaved_artist = load_token()
     if len(presaved_artist) > 0:
-        print(f"Loaded {len(presaved_artist)} saved artists")
+        print(f"{LIGHT_BLUE}Loaded {len(presaved_artist)} saved artists{RESET}")
     else:
-        print("No presaved elements loaded, this might be an error.")
+        print(f"{RED}No presaved elements loaded, this might be an error{RESET}")
     
     # Sync Slash Commands
     try:
         synced = await tree.sync()
-        print(f"Bot has synced {len(synced)} command(s)")
+        print(f"{LIGHT_BLUE}Bot has synced {len(synced)} command(s){RESET}")
     except Exception as exc:
         print(exc)
         
     # Start Token Request
     token, code, response = await req_token(auth_endpoint, spotify_cid, spotify_csecret)
     if not token == 0:
-        print(f"Spotify API access granted with token: {token}")
+        print(f"{GREEN}Spotify API access granted with token: {token}{RESET}")
     else:
-        print(f"Spotify API access error with code: {code}")
+        print(f"{RED}Spotify API access error with code: {code}{RESET}")
         print(response)
 
 def identify_commands(ctx):
