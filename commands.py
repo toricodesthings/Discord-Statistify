@@ -1,5 +1,7 @@
 import discord, json, os
 
+web_endpoint = "https://api.spotify.com"
+
 # ------------------- Non ASYNC FUNCTIONS ----------------------------
 
 # Loads presaved artist into databse for usage in commands
@@ -44,16 +46,16 @@ async def help(call_type, author):
         await call_type.response.send_message(f"This is the help function.")
 
 # List Saved Artists
-async def list(call_type, author, bot, list_param, *args):
+async def list(call_type, author, bot, listtarget, *args):
     er = list_artists(author, bot)
-    if list_param == 'artists':
+    if listtarget == 'artists':
         if isinstance(call_type, discord.Message):
             await call_type.reply(embed=er)
         else:
             await call_type.response.send_message(embed=er)
             
     else:
-        await call_type.reply(f"The parameter of the list function `{list_param}` is invalid.")
+        await call_type.reply(f"The parameter of the list function `{listtarget}` is invalid.")
         
 async def search(call_type, author, bot, url, token, *args):
     return

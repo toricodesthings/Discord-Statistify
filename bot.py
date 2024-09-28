@@ -10,7 +10,6 @@ LIGHT_BLUE = "\033[94m"
 RESET = "\033[0m"        
 
 #Establish Spotify Web Endpoint
-web_endpoint = "https://api.spotify.com"
 auth_endpoint = "https://accounts.spotify.com/api/token"
 access_token = ""
 
@@ -26,6 +25,10 @@ def load_token():
                     token = saved_token["access_token"]
                     expiry_time = datetime.fromtimestamp(saved_token["expires_at"]).strftime("%d-%m-%y %H:%M:%S")
                     return token, expiry_time
+                else:
+                    return None, None
+            else:
+                return None, None
     except FileNotFoundError:
         return None, None
     
@@ -103,71 +106,84 @@ async def on_ready():
     token, code, response = await req_token(auth_endpoint, spotify_cid, spotify_csecret)
     if not token == 0:
         global access_token
-        access_token = token()
-        print(f"{GREEN}Spotify API access granted with token: {token}{RESET}")
+        access_token = token
+        print(f"{GREEN}Spotify API access granted with token: {access_token}{RESET}")
     else:
         print(f"{RED}Spotify API access error with code: {code}{RESET}")
         print(response)
 
 def identify_commands(ctx):
     parts = ctx[2:].split()
-    command = parts[0]  # Remove the "!" from the command
-    if len(parts) > 1:
-        params = parts[1:]  # The rest are parameters
-        return command, params
-    else:
-        return command, False
+    # Remove the "s!" from the command
+    command = parts[0]  
+    
+    # Split paramaters if multiple
+    params = parts[1:] if len(parts) > 1 else []
+    return command, params
+
+def gather_command_argument(cmd_func, message, author, bot, access_token, params):
+    func_params = inspect.signature(cmd_func).parameters
+    possible_args = {
+        'call_type': message,
+        'author': author,
+        'bot': bot,
+        'token': access_token
+    }
+    
+    # Store only required parameters
+    pass_args = {k: v for k, v in possible_args.items() if k in func_params}
+    
+    # If requied, assign user input parameters to remaining positional arguments
+    for param_name, param in func_params.items():
+        if param_name in pass_args:
+            continue
+        if param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY):
+            try:
+                pass_args[param_name] = next(iter(params))
+            except StopIteration:
+                if param.default is param.empty:
+                    raise ValueError(f"The command {cmd_func} is missing required parameter(s): {param_name}")
+    return pass_args
 
 @bot.event
 async def on_message(message):
-    #Store Variables
+    # Store Variables
     author = message.author
     ctx = message.content.lower()
     
-    #Ignore self messages
+    # Ignore self messages
     if author.bot:
         return
-    
-    
-    
-    #Command Module
+
+    # Command Handling Module
     if ctx.startswith("s!"):
         if len(ctx) < 3:
             await message.reply("Hello there. If you need help, run /help or s!help")
         else:
             command, params = identify_commands(ctx)
-            try:
-                cmd_func = globals().get(command) or getattr(__import__('commands'), command, None)
-                if cmd_func is not None and callable(cmd_func):
-                    func_signature = inspect.signature(cmd_func)
-                    
-                    global access_token
-                    possible_args = {
-                        'message': message,
-                        'author': author,
-                        'bot': bot,
-                        'token': access_token,
-                        'params': params 
-                    }
-                    if params:
-                        await cmd_func(message, author, bot, *params)
-                    else:
-                        await cmd_func(message, author, bot)
-                else:
-                    await message.reply(f"The command you entered '{command}' is invalid.")
-            except AttributeError:
-                await message.reply(f"The command you entered '{command}' is invalid.")
 
+            cmd_func = globals().get(command) or getattr(__import__('commands'), command, None)
+            if cmd_func and callable(cmd_func):
+                try:
+                    # Gather arguments and call the command
+                    pass_args = gather_command_argument(cmd_func, message, author, bot, access_token, params)
+                    await cmd_func(**pass_args)
+                except ValueError as ve:
+                    await message.reply(ve)
+            else:
+                await message.reply(f"The command you entered '{command}' is invalid.")
+                   
+# Slash Commands
 
 @tree.command(name="ping", description="Pings Statisfy")
 async def slash_command(interaction: discord.Interaction):    
     author = interaction.user
-    await b_commands.ping(interaction, author, bot)
+    await b_commands.ping(interaction, bot)
 
 @tree.command(name="help", description="Access the Help Menu")
 async def slash_command(interaction: discord.Interaction):    
     author = interaction.user
-    await b_commands.help(interaction, author, bot)
+    await b_commands.help(interaction, author)
 
 @tree.command(name="list_artist", description="List Saved Artist")
 async def slash_command(interaction: discord.Interaction):    
