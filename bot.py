@@ -15,22 +15,24 @@ access_token = ""
 
 #Load and Request Token - Spotify Web API
 def load_token():
+    file_path = os.path.join(os.path.dirname(__file__), 'accesstoken.json')
+    
     try:
-        file_path = os.path.join(os.path.dirname(__file__), 'accesstoken.json')
         with open(file_path, 'r') as file:
             saved_token = json.load(file)
+            
+            # Check if token is previous generated
             if saved_token and saved_token["access_token"] is not None:
                 current_time = int(time.time())
-                if saved_token["expires_at"] is not None and current_time < (saved_token["expires_at"] - 30):
+                # Check if token is expired and attempt to generate a new one if 30 seconds before expiration
+                if current_time < (saved_token["expires_at"] - 30):
                     token = saved_token["access_token"]
                     expiry_time = datetime.fromtimestamp(saved_token["expires_at"]).strftime("%d-%m-%y %H:%M:%S")
                     return token, expiry_time
-                else:
-                    return None, None
-            else:
-                return None, None
+                
     except FileNotFoundError:
-        return None, None
+        pass
+    return None, None
     
 def store_token(token, expires_at):
     file_path = os.path.join(os.path.dirname(__file__), 'accesstoken.json')
@@ -38,18 +40,21 @@ def store_token(token, expires_at):
         'access_token': token,
         'expires_at': expires_at
     }
-    with open(file_path, 'w') as file:
-        json.dump(token_data, file)
+    try:
+        with open(file_path, 'w') as file:
+            json.dump(token_data, file)
+    except Exception as exc:
+        print(f"{RED}Error storing token: {exc}{RESET}")
     
 async def req_token(auth_e, c_id, c_secret):
-    
+    # Attempt to load previously generated token
     token, expiry = load_token()    
+    
     if token and expiry:
         print(f"{LIGHT_BLUE}Passing on previously generated token\nThis token will expire at {expiry}{RESET}")
-        return token, 1, None
-    else:
-        print("No token previously generated. Proceed to generation...")
-
+        return token, 200, None
+    
+    print("No token previously generated. Proceed to generation...")
     #Set Parameters
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded'
@@ -71,17 +76,20 @@ async def req_token(auth_e, c_id, c_secret):
                     return token, response.status, None
                 else:
                     error = await response.text()
-                    print(f"API Endpoint Error. See Spotify API reference page for details.")
+                    print(f"API Request Failed. See Spotify API reference page for details.")
                     return 0, response.status, error
+    except aiohttp.ClientError as cerr:
+        print(f"Encountered Client Side Error: {cerr}")
+        return None, 500, str(cerr)
+    
     except Exception as exc:
         print(f"Encountered Unexpected Error: {exc}")
+        return 0, response.status, exc
 #-------------------------------------------------------------------------------------------------
 
 #Load Token and Set Bot Parameters - Discord Application
 load_dotenv()
-bot_token = os.getenv("DISCORD_TOKEN")
-spotify_cid = os.getenv("CLIENT_ID")
-spotify_csecret = os.getenv("CLIENT_SECRET") 
+bot_token, spotify_cid, spotify_csecret = os.getenv("DISCORD_TOKEN"), os.getenv("CLIENT_ID"), os.getenv("CLIENT_SECRET") 
 bot = discord.Client(intents=discord.Intents.all())
 tree = discord.app_commands.CommandTree(bot)
 
@@ -115,13 +123,13 @@ async def on_ready():
 def identify_commands(ctx):
     parts = ctx[2:].split()
     # Remove the "s!" from the command
-    command = parts[0]  
+    command = parts[0].lower()  
     
     # Split paramaters if multiple
     params = parts[1:] if len(parts) > 1 else []
     return command, params
 
-def gather_command_argument(cmd_func, message, author, bot, access_token, params):
+def gather_command_argument(command, cmd_func, message, author, bot, access_token, params, ):
     func_params = inspect.signature(cmd_func).parameters
     possible_args = {
         'call_type': message,
@@ -131,32 +139,32 @@ def gather_command_argument(cmd_func, message, author, bot, access_token, params
     }
     
     # Store only required parameters
-    pass_args = {k: v for k, v in possible_args.items() if k in func_params}
-    
+    pass_args = {arg: v for arg, v in possible_args.items() if arg in func_params}
+    param_iter = iter(params)
     # If requied, assign user input parameters to remaining positional arguments
     for param_name, param in func_params.items():
         if param_name in pass_args:
             continue
         if param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY):
             try:
-                pass_args[param_name] = next(iter(params))
+                pass_args[param_name] = next(param_iter)
             except StopIteration:
                 if param.default is param.empty:
-                    raise ValueError(f"The command {cmd_func} is missing required parameter(s): {param_name}")
+                    raise ValueError(f"The command {command} is missing the required parameter. See help for more!")
     return pass_args
 
 @bot.event
 async def on_message(message):
     # Store Variables
     author = message.author
-    ctx = message.content.lower()
+    ctx = message.content
     
     # Ignore self messages
     if author.bot:
         return
 
     # Command Handling Module
-    if ctx.startswith("s!"):
+    if ctx.lower().startswith("s!"):
         if len(ctx) < 3:
             await message.reply("Hello there. If you need help, run /help or s!help")
         else:
@@ -166,7 +174,7 @@ async def on_message(message):
             if cmd_func and callable(cmd_func):
                 try:
                     # Gather arguments and call the command
-                    pass_args = gather_command_argument(cmd_func, message, author, bot, access_token, params)
+                    pass_args = gather_command_argument(command, cmd_func, message, author, bot, access_token, params)
                     await cmd_func(**pass_args)
                 except ValueError as ve:
                     await message.reply(ve)
@@ -189,6 +197,12 @@ async def slash_command(interaction: discord.Interaction):
 async def slash_command(interaction: discord.Interaction):    
     author = interaction.user
     await b_commands.list(interaction, author, bot, "artists")
+    
+@tree.command(name="get_artist_byid", description="Search Artist by URI code")
+@discord.app_commands.describe(id="Enter the Artist URI, URL, or Artist ID:")
+async def slash_command(interaction: discord.Interaction, id: str):    
+    author = interaction.user
+    await b_commands.get(interaction, author, id, access_token)
 
 # Run the bot using your bot token
 bot.run(bot_token)
