@@ -168,7 +168,7 @@ async def slash_command(interaction: discord.Interaction):
 @discord.app_commands.describe(id="Enter the Artist URI, URL, or Artist ID:")
 async def slash_command(interaction: discord.Interaction, id: str):    
     author = interaction.user
-    await b_commands.get(interaction, author, "artist", id, access_token)
+    await b_commands.get(interaction, author, "artists", id, access_token)
 
 # Run the bot using your bot token
 bot.run(bot_token)
