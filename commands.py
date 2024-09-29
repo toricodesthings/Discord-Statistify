@@ -29,9 +29,22 @@ def load_ps_artist():
         with open(file_path, "r") as file:
             return json.load(file)
     except FileNotFoundError:
-        print("savedartists.json not found, make sure it's not deleted.")    
+        print("savedartists.json not found, make sure it's not deleted.")
+    except json.JSONDecodeError:
+        return []
+
+def modify_ps_artist(new_artist):    
+    file_path = os.path.join(os.path.dirname(__file__), 'savedartists.json')
+    try:
+        with open(file_path, "w") as file:
+            json.dump(new_artist, file, indent=4)
+    except FileNotFoundError:
+        print("savedartists.json not found, make sure it's not deleted.")
+        return []
+    except json.JSONDecodeError:
+        return []
         
-def retrieve_saved(reply_type, interaction_msg):
+def retrieve_saved(interaction_msg):
     try:
         user_index = int(interaction_msg)
         presaved_artists = load_ps_artist()
@@ -45,6 +58,27 @@ def retrieve_saved(reply_type, interaction_msg):
     except ValueError:
         fail = "Invalid input. Please enter a number."
         return None, fail
+
+def append_saved(artist_uri, artist_name):
+    presaved_artists = load_ps_artist()
+    
+    for artist in presaved_artists:
+        if artist["artist_url"] == artist_uri:
+            status = f"Artist `{artist_name}` has already been saved."
+            return status
+    
+    new_artist = {
+        "artist": artist_name,
+        "artist_url": artist_uri
+    }
+    added = presaved_artists.append(new_artist)
+    try:
+        modify_ps_artist(added)
+        status = f"Succesfully saved artist `{artist_name}`"
+    except Exception as e:
+        status = f"Save command encountered an exception: {str(e)}"
+    return status
+        
         
 def extract_artist_id(u_input):
     if len(u_input) == 22 and u_input.isalnum():
@@ -71,14 +105,26 @@ def list_artists(author):
     avatar_url = author.avatar.url
     embed.set_footer(text=f"Requested by {author}", icon_url=avatar_url)
     for index, a in enumerate(presaved_artists):
-        embed.add_field(name=f"`{index}` {a["artist"]}", value=f"Artist ID: `{a["artist_url"]}`", inline=False)
+        embed.add_field(name=f"`{index}` - {a["artist"]}", value=f"Artist ID: `{a["artist_url"]}`", inline=False)
     return embed
 
 def format_get_artist(response):
     # Create an embed object
+    artist_name = response['name']
+    remaining_space = 56 - len(artist_name) - len("[Artist Information for ]")
+
+    if remaining_space > 0:
+        # Divide the remaining space equally on both sides
+        side_bars = "=" * (remaining_space // 2)
+        # Create the description string
+        description = f"{side_bars}[Artist Information for {artist_name}]{side_bars}"
+    else:
+        # If the artist name is longer than the URL, just use the artist name
+        description = f"[Artist Information for {artist_name}]"
+        
     embed = discord.Embed(
         title=response['name'],  
-        description=f"{"═" * len(response['name'])}[Artist Information for {response['name']}]{"═" * len(response['name'])}",
+        description=description,
         color=discord.Color.green() 
     )
     embed.set_thumbnail(url=response['images'][0]['url'])
@@ -141,12 +187,10 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
                 listembed = list_artists(author)
                 await reply_type(embed=listembed)
                 interaction_msg = await wait_for_user_input(call_type, author, bot, "Please specify (by number) which saved artist you want to retrieve:")
-                artisturi, fail = retrieve_saved(reply_type, interaction_msg)
+                artisturi, fail = retrieve_saved(interaction_msg)
                 if fail:
                     await reply_type(fail)
                     return
-                
-                    
         except ValueError as value_error:
             reply_type(value_error)
             return
@@ -168,3 +212,31 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
             return
     
     await reply_type(f"The parameter of the info command `{searchtarget}` is invalid.")
+
+# Temporary Save Artist (Will Update Later)
+async def save(call_type, author, bot, savetarget, u_input, token, *args):
+    global web_endpoint
+    reply_type = get_reply_method(call_type)
+    if savetarget.lower() == 'artists':
+        try:
+            artisturi = extract_artist_id(u_input)
+            data, response_code = await spotifyapi.request_artist_info(artisturi, token)
+            if data and response_code == 200:
+                artistname = data['name']
+                print(artistname)
+                statusmsg = append_saved(artisturi, artistname)
+            else:
+                if response_code == 400:
+                    statusmsg = f"The artist URI code you entered is invalid"
+                else:
+                    statusmsg = f"Cannot Save due to API Request fail. Status code {response_code}"
+            
+            await reply_type(statusmsg)
+            return
+            
+            
+        except ValueError as value_error:
+            await reply_type(value_error)
+            return
+    else:
+        await reply_type(f"The parameter of the info command `{savetarget}` is invalid.")

@@ -146,6 +146,7 @@ async def on_message(message):
                     await message.reply(ve)
             else:
                 await message.reply(f"The command you entered '{command}' is invalid.")
+                
                    
 # Slash Commands
 
