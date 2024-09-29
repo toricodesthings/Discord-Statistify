@@ -2,6 +2,7 @@
 import discord, json, os, aiohttp, time, inspect
 from datetime import datetime
 import commands as b_commands
+import apiwrapper as spotifyapi
 from dotenv import load_dotenv
 
 RED = "\033[91m"
@@ -55,36 +56,12 @@ async def req_token(auth_e, c_id, c_secret):
         return token, 200, None
     
     print("No token previously generated. Proceed to generation...")
-    #Set Parameters
-    headers = {
-        'Content-Type': 'application/x-www-form-urlencoded'
-    }
-    data = {
-        'grant_type': 'client_credentials',
-        'client_id': c_id,
-        'client_secret': c_secret
-    }
-    try: 
-        print(f"Requesting token from {auth_e}...")
-        async with aiohttp.ClientSession() as session:
-            async with session.post(auth_e, headers = headers, data = data) as response:
-                if response.status == 200:
-                    r = await response.json()
-                    token = r['access_token']
-                    expiry = int(time.time()) + r['expires_in']
-                    store_token(token, expiry)
-                    return token, response.status, None
-                else:
-                    error = await response.text()
-                    print(f"API Request Failed. See Spotify API reference page for details.")
-                    return 0, response.status, error
-    except aiohttp.ClientError as cerr:
-        print(f"Encountered Client Side Error: {cerr}")
-        return None, 500, str(cerr)
+    token, expiry, response_code, response_msg = await spotifyapi.generate_token(auth_e, c_id, c_secret)
+    if token and response_code == 200:
+        store_token(token, expiry)
+    return token, response_code, response_msg
+
     
-    except Exception as exc:
-        print(f"Encountered Unexpected Error: {exc}")
-        return 0, response.status, exc
 #-------------------------------------------------------------------------------------------------
 
 #Load Token and Set Bot Parameters - Discord Application
@@ -107,27 +84,17 @@ async def on_ready():
     try:
         synced = await tree.sync()
         print(f"{LIGHT_BLUE}Bot has synced {len(synced)} command(s){RESET}")
-    except Exception as exc:
-        print(exc)
+    except Exception as e:
+        print(e)
         
     # Start Token Request
-    token, code, response = await req_token(auth_endpoint, spotify_cid, spotify_csecret)
+    token, response_code, response_msg = await req_token(auth_endpoint, spotify_cid, spotify_csecret)
     if not token == 0:
         global access_token
         access_token = token
         print(f"{GREEN}Spotify API access granted with token: {access_token}{RESET}")
     else:
-        print(f"{RED}Spotify API access error with code: {code}{RESET}")
-        print(response)
-
-def identify_commands(ctx):
-    parts = ctx[2:].split()
-    # Remove the "s!" from the command
-    command = parts[0].lower()  
-    
-    # Split paramaters if multiple
-    params = parts[1:] if len(parts) > 1 else []
-    return command, params
+        print(f"{RED}Spotify API access error with code: {response_code}\nError Message: {response_msg}{RESET}")
 
 def gather_command_argument(command, cmd_func, message, author, bot, access_token, params, ):
     func_params = inspect.signature(cmd_func).parameters
@@ -168,7 +135,7 @@ async def on_message(message):
         if len(ctx) < 3:
             await message.reply("Hello there. If you need help, run /help or s!help")
         else:
-            command, params = identify_commands(ctx)
+            command, params = b_commands.identify_commands(ctx)
 
             cmd_func = globals().get(command) or getattr(__import__('commands'), command, None)
             if cmd_func and callable(cmd_func):

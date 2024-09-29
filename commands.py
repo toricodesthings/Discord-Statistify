@@ -5,6 +5,15 @@ web_endpoint = "https://api.spotify.com"
 
 # ------------------- Non ASYNC FUNCTIONS ----------------------------
 
+def identify_commands(ctx):
+    parts = ctx[2:].split()
+    # Remove the "s!" from the command
+    command = parts[0].lower()  
+    
+    # Split paramaters if multiple
+    params = parts[1:] if len(parts) > 1 else []
+    return command, params
+
 def get_reply_method(call_type):
     if isinstance(call_type, discord.Message):
         return call_type.reply
@@ -86,7 +95,8 @@ async def list(call_type, author, bot, listtarget, *args):
         await reply_type(embed=listembed)
     else:
         await reply_type(if_error)
-        
+
+# Get Artist Info        
 async def get(call_type, author, searchtarget, u_input, token, *args):
     global web_endpoint
     reply_type = get_reply_method(call_type)
