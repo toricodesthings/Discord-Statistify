@@ -70,10 +70,10 @@ def append_saved(artist_uri, artist_name):
     new_artist = {
         "artist": artist_name,
         "artist_url": artist_uri
-    }
-    added = presaved_artists.append(new_artist)
+    } 
+    presaved_artists.append(new_artist)
     try:
-        modify_ps_artist(added)
+        modify_ps_artist(presaved_artists)
         status = f"Succesfully saved artist `{artist_name}`"
     except Exception as e:
         status = f"Save command encountered an exception: {str(e)}"
