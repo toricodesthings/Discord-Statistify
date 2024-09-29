@@ -138,9 +138,7 @@ def format_get_artist(response):
     return embed
 # ------------------- BOT ASYNC FUNCTIONS ----------------------------
 
-async def wait_for_user_input(call_type, author, bot, user_prompt):
-    reply_type = get_reply_method(call_type)
-    await reply_type(user_prompt)
+async def wait_for_user_input(call_type, author, bot):
     def check(m):
         return m.author == author and m.channel == call_type.channel
     try:
@@ -148,9 +146,8 @@ async def wait_for_user_input(call_type, author, bot, user_prompt):
         interaction_msg = await bot.wait_for("message", timeout=10.0, check=check)
         return interaction_msg.content
     except asyncio.TimeoutError:
+        reply_type = get_reply_method(call_type)
         await reply_type("Sorry, you took too long to respond. Please try again.")
-        
-        
 
 # Bot Latency Function
 async def ping(call_type, bot):
@@ -161,9 +158,33 @@ async def ping(call_type, bot):
 
 # Help Function
 async def help(call_type, author):
-    bot_msg = "This is the help function."
+    embed = discord.Embed(
+        title="Statistify Help Menu",  
+        description=" V All available commands and parameters are listed below V",
+        color=discord.Color.green() 
+    )
+    embed.add_field(name="Main Artist Commands:", value=f"""
+=============================================================
+**`List Artists`** lists all artists saved by user
+Example: `s!list artists`
+=============================================================
+**`Get Artists`** retrieves artist info by `Spotify ID` or `Saved`
+By ID Example: `s!get artists [Spotify URL, URI or Direct ID]`
+By Saved: `s!get artists saved` (Follow the prompt after)
+=============================================================
+**`Save Artists`** saves an artist by `Spotify ID`
+Example: `s!save artists` [Spotify URL, URI or Direct ID]
+=============================================================
+                    """, inline=False)
+    embed.add_field(name="Misc Commands", value=f"""
+\n
+**`Ping`** pings the bot
+**`Help`** requests the help menu
+                    """, inline=False)
+
+
     reply_type = get_reply_method(call_type)
-    await reply_type(bot_msg)
+    await reply_type(embed=embed)
 
 # List Saved Artists
 async def list(call_type, author, listtarget, *args):
@@ -186,11 +207,9 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
             
             if artisturi == "use_saved" and isinstance(call_type, discord.Message):
                 listembed = list_artists(author)
-                await reply_type(embed=listembed)
-                
+                await reply_type("Please specify (by number) which saved artist you want to retrieve:", embed=listembed)
                 # Await for user input
-                interaction_msg = await wait_for_user_input(call_type, author, bot, 
-                                                            "Please specify (by number) which saved artist you want to retrieve:")
+                interaction_msg = await wait_for_user_input(call_type, author, bot)
                 artisturi, fail = retrieve_saved(interaction_msg)
                 if fail:
                     await reply_type(fail)
@@ -214,7 +233,7 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
     await reply_type(f"The parameter of the info command `{searchtarget}` is invalid.")
 
 # Temporary Save Artist (Will Update Later)
-async def save(call_type, author, bot, savetarget, u_input, token, *args):
+async def save(call_type, savetarget, u_input, token, *args):
     reply_type = get_reply_method(call_type)
     
     if savetarget.lower() == 'artists':
