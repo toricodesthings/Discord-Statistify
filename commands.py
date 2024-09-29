@@ -1,7 +1,8 @@
 import discord, json, os, aiohttp
 from urllib.parse import urlparse
+import apiwrapper as spotifyapi
 
-web_endpoint = "https://api.spotify.com"
+
 
 # ------------------- Non ASYNC FUNCTIONS ----------------------------
 
@@ -20,7 +21,7 @@ def get_reply_method(call_type):
     else:
         return call_type.response.send_message
 
-# Loads presaved artist into databse for usage in commands
+#Loads presaved artist into databse for usage in commands
 def load_ps_artist():
     file_path = os.path.join(os.path.dirname(__file__), 'savedartists.json')
     try:
@@ -100,32 +101,30 @@ async def list(call_type, author, bot, listtarget, *args):
 async def get(call_type, author, searchtarget, u_input, token, *args):
     global web_endpoint
     reply_type = get_reply_method(call_type)
+    embedget = None
     if searchtarget.lower() == 'artists':
-        try: 
+        try:
             artisturi = extract_artist_id(u_input)
-            url = f"{web_endpoint}/v1/artists/{artisturi}"
-            headers = {
-                "Authorization": f"Bearer {token}"
-            }
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        embedget = format_get_artist(data)
-                    elif response.status == 400:
-                        bot_msg = f"The artist URI code you entered is invalid"
-                    else:
-                        bot_msg = f"API Request failed with status code {response.status}"
-        except ValueError:
-            bot_msg = str(ValueError)
+            data, response_code = await spotifyapi.request_artist_info(artisturi, token)
+            if data and response_code == 200:
+                print(data)
+                print(response_code)
+                embedget = format_get_artist(data)
+            else:
+                
+                if response_code == 400:
+                    bot_msg = f"The artist URI code you entered is invalid"
+                else:
+                    bot_msg = f"API Request failed with status code {response_code}"
+        except ValueError as value_error:
+            bot_msg = str(value_error)
             pass
-
+                    
         if embedget:
             await reply_type(embed=embedget)
-            
+            return
         else:
             await reply_type(bot_msg)
-            
-    else:
-        await reply_type(f"The parameter of the info command `{searchtarget}` is invalid.")
+            return
+    
+    await reply_type(f"The parameter of the info command `{searchtarget}` is invalid.")

@@ -1,5 +1,5 @@
 #Load required libraries
-import discord, json, os, aiohttp, time, inspect
+import discord, json, os, time, inspect
 from datetime import datetime
 import commands as b_commands
 import apiwrapper as spotifyapi
@@ -10,8 +10,7 @@ GREEN = "\033[92m"
 LIGHT_BLUE = "\033[94m"
 RESET = "\033[0m"        
 
-#Establish Spotify Web Endpoint
-auth_endpoint = "https://accounts.spotify.com/api/token"
+#Establish Global Variable access_token
 access_token = ""
 
 #Load and Request Token - Spotify Web API
@@ -47,7 +46,7 @@ def store_token(token, expires_at):
     except Exception as exc:
         print(f"{RED}Error storing token: {exc}{RESET}")
     
-async def req_token(auth_e, c_id, c_secret):
+async def req_token(c_id, c_secret):
     # Attempt to load previously generated token
     token, expiry = load_token()    
     
@@ -56,7 +55,7 @@ async def req_token(auth_e, c_id, c_secret):
         return token, 200, None
     
     print("No token previously generated. Proceed to generation...")
-    token, expiry, response_code, response_msg = await spotifyapi.generate_token(auth_e, c_id, c_secret)
+    token, expiry, response_code, response_msg = await spotifyapi.generate_token(c_id, c_secret)
     if token and response_code == 200:
         store_token(token, expiry)
     return token, response_code, response_msg
@@ -88,7 +87,7 @@ async def on_ready():
         print(e)
         
     # Start Token Request
-    token, response_code, response_msg = await req_token(auth_endpoint, spotify_cid, spotify_csecret)
+    token, response_code, response_msg = await req_token(spotify_cid, spotify_csecret)
     if not token == 0:
         global access_token
         access_token = token
@@ -169,7 +168,7 @@ async def slash_command(interaction: discord.Interaction):
 @discord.app_commands.describe(id="Enter the Artist URI, URL, or Artist ID:")
 async def slash_command(interaction: discord.Interaction, id: str):    
     author = interaction.user
-    await b_commands.get(interaction, author, id, access_token)
+    await b_commands.get(interaction, author, "artist", id, access_token)
 
 # Run the bot using your bot token
 bot.run(bot_token)
