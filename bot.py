@@ -95,7 +95,7 @@ async def on_ready():
     else:
         print(f"{RED}Spotify API access error with code: {response_code}\nError Message: {response_msg}{RESET}")
 
-def gather_command_argument(command, cmd_func, message, author, bot, access_token, params, ):
+def gather_command_argument(command, cmd_func, message, author, bot, access_token, params):
     func_params = inspect.signature(cmd_func).parameters
     possible_args = {
         'call_type': message,
@@ -168,7 +168,7 @@ async def slash_command(interaction: discord.Interaction):
 @discord.app_commands.describe(id="Enter the Artist URI, URL, or Artist ID:")
 async def slash_command(interaction: discord.Interaction, id: str):    
     author = interaction.user
-    await b_commands.get(interaction, author, "artists", id, access_token)
+    await b_commands.get(interaction, author, bot, "artists", id, access_token)
 
 # Run the bot using your bot token
 bot.run(bot_token)

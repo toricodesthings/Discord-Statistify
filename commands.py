@@ -1,6 +1,7 @@
-import discord, json, os, aiohttp
+import discord, json, os, asyncio
 from urllib.parse import urlparse
 import apiwrapper as spotifyapi
+
 
 
 
@@ -30,6 +31,21 @@ def load_ps_artist():
     except FileNotFoundError:
         print("savedartists.json not found, make sure it's not deleted.")    
         
+def retrieve_saved(reply_type, interaction_msg):
+    try:
+        user_index = int(interaction_msg)
+        presaved_artists = load_ps_artist()
+        if 0 <= user_index < len(presaved_artists):
+            selected_artist_uri = presaved_artists[user_index]['artist_url']
+            return selected_artist_uri, None
+        else:
+            fail = "Invalid input. Please enter a valid number from the list."
+            return None, fail
+            
+    except ValueError:
+        fail = "Invalid input. Please enter a number."
+        return None, fail
+        
 def extract_artist_id(u_input):
     if len(u_input) == 22 and u_input.isalnum():
         return u_input
@@ -39,11 +55,13 @@ def extract_artist_id(u_input):
     if "open.spotify.com" in u_input:
         # Extract ID from URL
         return urlparse(u_input).path.split("/")[2]
+    if u_input == "saved":
+        return "use_saved"
 
     raise ValueError("The artist parameter must be a valid Spotify URI, URL, or Artist ID")
         
 # List Presaved Artist Function
-def list_artists(author, bot):
+def list_artists(author):
     presaved_artists = load_ps_artist()
     embed = discord.Embed(
         title="Saved Artists",
@@ -52,8 +70,8 @@ def list_artists(author, bot):
     )
     avatar_url = author.avatar.url
     embed.set_footer(text=f"Requested by {author}", icon_url=avatar_url)
-    for a in presaved_artists:
-        embed.add_field(name=f"{a["artist"]}", value=f"Url: `{a["artist_url"]}`", inline=False)
+    for index, a in enumerate(presaved_artists):
+        embed.add_field(name=f"`{index}` {a["artist"]}", value=f"Artist ID: `{a["artist_url"]}`", inline=False)
     return embed
 
 def format_get_artist(response):
@@ -74,6 +92,20 @@ def format_get_artist(response):
     return embed
 # ------------------- BOT ASYNC FUNCTIONS ----------------------------
 
+async def wait_for_user_input(call_type, author, bot, user_prompt):
+    reply_type = get_reply_method(call_type)
+    await reply_type(user_prompt)
+    def check(m):
+        return m.author == author and m.channel == call_type.channel
+    try:
+
+        interaction_msg = await bot.wait_for("message", timeout=10.0, check=check)
+        return interaction_msg.content
+    except asyncio.TimeoutError:
+        await reply_type("Sorry, you took too long to respond. Please try again.")
+        
+        
+
 # Bot Latency Function
 async def ping(call_type, bot):
     ping = round(bot.latency * 1000, 2)
@@ -88,8 +120,8 @@ async def help(call_type, author):
     await reply_type(bot_msg)
 
 # List Saved Artists
-async def list(call_type, author, bot, listtarget, *args):
-    listembed = list_artists(author, bot)
+async def list(call_type, author, listtarget, *args):
+    listembed = list_artists(author)
     reply_type = get_reply_method(call_type)
     if_error = f"The parameter of the list function `{listtarget}` is invalid."
     if listtarget.lower() == 'artists':
@@ -98,28 +130,36 @@ async def list(call_type, author, bot, listtarget, *args):
         await reply_type(if_error)
 
 # Get Artist Info        
-async def get(call_type, author, searchtarget, u_input, token, *args):
+async def get(call_type, author, bot, searchtarget, u_input, token, *args):
     global web_endpoint
     reply_type = get_reply_method(call_type)
-    embedget = None
+    
     if searchtarget.lower() == 'artists':
         try:
             artisturi = extract_artist_id(u_input)
-            data, response_code = await spotifyapi.request_artist_info(artisturi, token)
-            if data and response_code == 200:
-                print(data)
-                print(response_code)
-                embedget = format_get_artist(data)
-            else:
+            if artisturi == "use_saved" and isinstance(call_type, discord.Message):
+                listembed = list_artists(author)
+                await reply_type(embed=listembed)
+                interaction_msg = await wait_for_user_input(call_type, author, bot, "Please specify (by number) which saved artist you want to retrieve:")
+                artisturi, fail = retrieve_saved(reply_type, interaction_msg)
+                if fail:
+                    await reply_type(fail)
+                    return
                 
-                if response_code == 400:
-                    bot_msg = f"The artist URI code you entered is invalid"
-                else:
-                    bot_msg = f"API Request failed with status code {response_code}"
-        except ValueError as value_error:
-            bot_msg = str(value_error)
-            pass
                     
+        except ValueError as value_error:
+            reply_type(value_error)
+            return
+        
+        embedget = None
+        data, response_code = await spotifyapi.request_artist_info(artisturi, token)
+        if data and response_code == 200:
+            embedget = format_get_artist(data)
+        else:
+            if response_code == 400:
+                bot_msg = f"The artist URI code you entered is invalid"
+            else:
+                bot_msg = f"API Request failed with status code {response_code}"
         if embedget:
             await reply_type(embed=embedget)
             return
