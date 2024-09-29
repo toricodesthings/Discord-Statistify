@@ -48,8 +48,8 @@ def retrieve_saved(interaction_msg):
     try:
         user_index = int(interaction_msg)
         presaved_artists = load_ps_artist()
-        if 0 <= user_index < len(presaved_artists):
-            selected_artist_uri = presaved_artists[user_index]['artist_url']
+        if 1 <= user_index < len(presaved_artists) + 1:
+            selected_artist_uri = presaved_artists[user_index - 1]['artist_url']
             return selected_artist_uri, None
         else:
             fail = "Invalid input. Please enter a valid number from the list."
@@ -105,7 +105,7 @@ def list_artists(author):
     avatar_url = author.avatar.url
     embed.set_footer(text=f"Requested by {author}", icon_url=avatar_url)
     for index, a in enumerate(presaved_artists):
-        embed.add_field(name=f"`{index}` - {a["artist"]}", value=f"Artist ID: `{a["artist_url"]}`", inline=False)
+        embed.add_field(name=f"`{index+1}` - {a["artist"]}", value=f"Artist ID: `{a["artist_url"]}`", inline=False)
     return embed
 
 def format_get_artist(response):
@@ -177,66 +177,69 @@ async def list(call_type, author, listtarget, *args):
 
 # Get Artist Info        
 async def get(call_type, author, bot, searchtarget, u_input, token, *args):
-    global web_endpoint
     reply_type = get_reply_method(call_type)
-    
+    bot_msg = None
+
     if searchtarget.lower() == 'artists':
         try:
             artisturi = extract_artist_id(u_input)
+            
             if artisturi == "use_saved" and isinstance(call_type, discord.Message):
                 listembed = list_artists(author)
                 await reply_type(embed=listembed)
-                interaction_msg = await wait_for_user_input(call_type, author, bot, "Please specify (by number) which saved artist you want to retrieve:")
+                
+                # Await for user input
+                interaction_msg = await wait_for_user_input(call_type, author, bot, 
+                                                            "Please specify (by number) which saved artist you want to retrieve:")
                 artisturi, fail = retrieve_saved(interaction_msg)
                 if fail:
                     await reply_type(fail)
                     return
-        except ValueError as value_error:
-            reply_type(value_error)
-            return
         
-        embedget = None
+        except ValueError as value_error:
+            await reply_type(value_error)
+            return
+
+        # API Request to Fetch Artist Data
         data, response_code = await spotifyapi.request_artist_info(artisturi, token)
+        
         if data and response_code == 200:
             embedget = format_get_artist(data)
-        else:
-            if response_code == 400:
-                bot_msg = f"The artist URI code you entered is invalid"
-            else:
-                bot_msg = f"API Request failed with status code {response_code}"
-        if embedget:
             await reply_type(embed=embedget)
-            return
         else:
+            bot_msg = "Invalid artist URI." if response_code == 400 else f"API Request failed with status code {response_code}"
             await reply_type(bot_msg)
-            return
-    
+        return
+
     await reply_type(f"The parameter of the info command `{searchtarget}` is invalid.")
 
 # Temporary Save Artist (Will Update Later)
 async def save(call_type, author, bot, savetarget, u_input, token, *args):
-    global web_endpoint
     reply_type = get_reply_method(call_type)
+    
     if savetarget.lower() == 'artists':
         try:
             artisturi = extract_artist_id(u_input)
+            
+            # API Request to Fetch Artist Data
             data, response_code = await spotifyapi.request_artist_info(artisturi, token)
+            
             if data and response_code == 200:
-                artistname = data['name']
-                print(artistname)
+                artistname = data.get('name', 'Unknown Artist')
+                # Save artist info
                 statusmsg = append_saved(artisturi, artistname)
             else:
-                if response_code == 400:
-                    statusmsg = f"The artist URI code you entered is invalid"
-                else:
-                    statusmsg = f"Cannot Save due to API Request fail. Status code {response_code}"
-            
+                # Handle invalid or failed API responses
+                statusmsg = (
+                    "The artist URI code you entered is invalid."
+                    if response_code == 400
+                    else f"Cannot save due to API request failure. Status code: {response_code}"
+                )
+                
             await reply_type(statusmsg)
-            return
-            
-            
-        except ValueError as value_error:
+        
+        except ValueError as value_error:        
             await reply_type(value_error)
-            return
-    else:
-        await reply_type(f"The parameter of the info command `{savetarget}` is invalid.")
+            
+        return
+    await reply_type(f"The parameter of the save command `{savetarget}` is invalid.")
