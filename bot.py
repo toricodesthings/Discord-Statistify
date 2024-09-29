@@ -1,9 +1,10 @@
 #Load required libraries
-import discord, json, os, time, inspect
-from datetime import datetime
+import discord, json, os, time, inspect, slash_commands
 import commands as b_commands
 import apiwrapper as spotifyapi
+from datetime import datetime
 from dotenv import load_dotenv
+
 
 RED = "\033[91m"
 GREEN = "\033[92m"
@@ -60,14 +61,12 @@ async def req_token(c_id, c_secret):
         store_token(token, expiry)
     return token, response_code, response_msg
 
-    
 #-------------------------------------------------------------------------------------------------
 
 #Load Token and Set Bot Parameters - Discord Application
 load_dotenv()
 bot_token, spotify_cid, spotify_csecret = os.getenv("DISCORD_TOKEN"), os.getenv("CLIENT_ID"), os.getenv("CLIENT_SECRET") 
 bot = discord.Client(intents=discord.Intents.all())
-tree = discord.app_commands.CommandTree(bot)
 
 #Report when Bot is Ready and Sync Slash Commands
 @bot.event
@@ -79,13 +78,6 @@ async def on_ready():
     else:
         print(f"{RED}No presaved elements loaded, this might be an error{RESET}")
     
-    # Sync Slash Commands
-    try:
-        synced = await tree.sync()
-        print(f"{LIGHT_BLUE}Bot has synced {len(synced)} command(s){RESET}")
-    except Exception as e:
-        print(e)
-        
     # Start Token Request
     token, response_code, response_msg = await req_token(spotify_cid, spotify_csecret)
     if not token == 0:
@@ -94,7 +86,16 @@ async def on_ready():
         print(f"{GREEN}Spotify API access granted with token: {access_token}{RESET}")
     else:
         print(f"{RED}Spotify API access error with code: {response_code}\nError Message: {response_msg}{RESET}")
-
+        
+    # Load and Sync Slash Commands Module and Pass access_token to Module
+    try:
+        synced = await slash_commands.setup_slash_commands(access_token, bot)
+        print(f"{LIGHT_BLUE}Bot has synced {len(synced)} command(s){RESET}")
+    except Exception as e:
+        print(e)
+    
+    print(f"{GREEN}Bot is Ready{RESET}")
+        
 def gather_command_argument(command, cmd_func, message, author, bot, access_token, params):
     func_params = inspect.signature(cmd_func).parameters
     possible_args = {
@@ -150,26 +151,8 @@ async def on_message(message):
                    
 # Slash Commands
 
-@tree.command(name="ping", description="Pings Statisfy")
-async def slash_command(interaction: discord.Interaction):    
-    author = interaction.user
-    await b_commands.ping(interaction, bot)
 
-@tree.command(name="help", description="Access the Help Menu")
-async def slash_command(interaction: discord.Interaction):    
-    author = interaction.user
-    await b_commands.help(interaction, author)
-
-@tree.command(name="list_artist", description="List Saved Artist")
-async def slash_command(interaction: discord.Interaction):    
-    author = interaction.user
-    await b_commands.list(interaction, author, bot, "artists")
     
-@tree.command(name="get_artist_byid", description="Search Artist by URI code")
-@discord.app_commands.describe(id="Enter the Artist URI, URL, or Artist ID:")
-async def slash_command(interaction: discord.Interaction, id: str):    
-    author = interaction.user
-    await b_commands.get(interaction, author, bot, "artists", id, access_token)
 
 # Run the bot using your bot token
 bot.run(bot_token)
