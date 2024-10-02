@@ -5,7 +5,7 @@ import apiwrapper as spotifyapi
 from datetime import datetime
 from dotenv import load_dotenv
 
-
+#TERMINAL COLOR CODE
 RED = "\033[91m"
 GREEN = "\033[92m"
 LIGHT_BLUE = "\033[94m"
@@ -47,7 +47,7 @@ def store_token(token, expires_at):
     except Exception as exc:
         print(f"{RED}Error storing token: {exc}{RESET}")
     
-async def req_token(c_id, c_secret):
+async def request_token(c_id, c_secret):
     # Attempt to load previously generated token
     token, expiry = load_token()    
     
@@ -79,7 +79,7 @@ async def on_ready():
         print(f"{RED}No presaved elements loaded, this might be an error{RESET}")
     
     # Start Token Request
-    token, response_code, response_msg = await req_token(spotify_cid, spotify_csecret)
+    token, response_code, response_msg = await request_token(spotify_cid, spotify_csecret)
     if not token == 0:
         global access_token
         access_token = token
@@ -148,11 +148,5 @@ async def on_message(message):
             else:
                 await message.reply(f"The command you entered '{command}' is invalid.")
                 
-                   
-# Slash Commands
-
-
-    
-
 # Run the bot using your bot token
 bot.run(bot_token)

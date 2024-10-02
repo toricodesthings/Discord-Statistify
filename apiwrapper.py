@@ -53,3 +53,16 @@ async def request_artist_info(artisturi, token):
             return None, response.status
 
 #API Req #3: Get Artist Top Track
+async def request_artist_toptracks(artisturi, token):
+    global web_endpoint
+    url = f"{web_endpoint}/v1/artists/{artisturi}/top-tracks"
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers = headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data, response.status
+            return None, response.status

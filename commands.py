@@ -1,6 +1,8 @@
 import discord, json, os, asyncio
-from urllib.parse import urlparse
 import apiwrapper as spotifyapi
+from urllib.parse import urlparse
+
+# -------------------Automatic Commands on_ready()----------------------------
 
 
 
@@ -136,6 +138,41 @@ def format_get_artist(response):
     embed.add_field(name="Full Spotify URI", value=f"`{response['uri']}`", inline=False)
 
     return embed
+
+def create_track_embed(data):
+    embeds = []
+    for track in data['tracks']:
+        album = track['album']
+        album_name = album['name']
+        track_name = track['name']
+        artist_name = track['artists'][0]['name']
+        
+        # Ignore track name if it matches the album name
+        display_track_name = "" if album_name == track_name else track_name
+        
+        # Check if the album contains multiple tracks
+        if album['total_tracks'] > 1:
+            # List all tracks (just simulating a placeholder here since no full album info is given in this data)
+            track_list = "\n".join([f"Track {i+1}: Placeholder Track Name" for i in range(album['total_tracks'])])
+        else:
+            track_list = display_track_name or "Single"
+        
+        # Create the embed for the track
+        embed = discord.Embed(
+            title=album_name,
+            description=f"Artist: {artist_name}\n{track_list}",
+            color=discord.Color.blue()
+        )
+        
+        # Add album cover image
+        embed.set_thumbnail(url=album['images'][0]['url'])
+        
+        # Add additional details
+        embed.add_field(name="Release Date", value=album['release_date'], inline=False)
+        
+        embeds.append(embed)
+    
+    return embeds
 # ------------------- BOT ASYNC FUNCTIONS ----------------------------
 
 async def wait_for_user_input(call_type, author, bot):
@@ -214,7 +251,9 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
                 if fail:
                     await reply_type(fail)
                     return
-        
+            elif artisturi == "use_saved" and isinstance(call_type, discord.Interaction):
+                await reply_type("Please specify (by number) which saved artist you want to retrieve:")
+                return
         except ValueError as value_error:
             await reply_type(value_error)
             return
@@ -222,12 +261,18 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
         # API Request to Fetch Artist Data
         data, response_code = await spotifyapi.request_artist_info(artisturi, token)
         
+        track_data, response_code_two = await spotifyapi.request_artist_toptracks(artisturi, token)
+        
         if data and response_code == 200:
             embedget = format_get_artist(data)
             await reply_type(embed=embedget)
         else:
             bot_msg = "Invalid artist URI." if response_code == 400 else f"API Request failed with status code {response_code}"
             await reply_type(bot_msg)
+            
+        if track_data and response_code_two == 200:
+            tembed_get = create_track_embed(track_data)
+            await reply_type(embed=tembed_get[0])
         return
 
     await reply_type(f"The parameter of the info command `{searchtarget}` is invalid.")
@@ -242,6 +287,7 @@ async def save(call_type, savetarget, u_input, token, *args):
             
             # API Request to Fetch Artist Data
             data, response_code = await spotifyapi.request_artist_info(artisturi, token)
+            
             
             if data and response_code == 200:
                 artistname = data.get('name', 'Unknown Artist')
