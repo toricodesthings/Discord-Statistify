@@ -46,13 +46,19 @@ def modify_ps_artist(new_artist):
     except json.JSONDecodeError:
         return []
         
-def retrieve_saved(interaction_msg):
+def retrieve_saved(author, interaction_msg):
     try:
         user_index = int(interaction_msg)
+        author = str(author.id)
+        user_saved_artists = []
         presaved_artists = load_ps_artist()
-        if 1 <= user_index < len(presaved_artists) + 1:
-            selected_artist_uri = presaved_artists[user_index - 1]['artist_url']
+        for author, artists in presaved_artists.items():
+            user_saved_artists.extend(artists)
+        
+        if 1 <= user_index <= len(user_saved_artists):
+            selected_artist_uri = user_saved_artists[user_index - 1]['artist_url']
             return selected_artist_uri, None
+
         else:
             fail = "Invalid input. Please enter a valid number from the list."
             return None, fail
@@ -61,26 +67,30 @@ def retrieve_saved(interaction_msg):
         fail = "Invalid input. Please enter a number."
         return None, fail
 
-def append_saved(artist_uri, artist_name):
+# Add artist to existing list for speific user
+def append_saved(author, artist_uri, artist_name):
+    author = str(author.id)
     presaved_artists = load_ps_artist()
     
-    for artist in presaved_artists:
+    for artist in presaved_artists.get(author, []):
         if artist["artist_url"] == artist_uri:
-            status = f"Artist `{artist_name}` has already been saved."
+            status = f"You have already saved the artist `{artist_name}`"
             return status
     
     new_artist = {
         "artist": artist_name,
         "artist_url": artist_uri
     } 
-    presaved_artists.append(new_artist)
+    if author in presaved_artists:
+        presaved_artists[author].append(new_artist)
+    else:
+        presaved_artists[author] = [new_artist]
     try:
         modify_ps_artist(presaved_artists)
         status = f"Succesfully saved artist `{artist_name}`"
     except Exception as e:
         status = f"Save command encountered an exception: {str(e)}"
     return status
-        
         
 def extract_artist_id(u_input):
     if len(u_input) == 22 and u_input.isalnum():
@@ -99,18 +109,22 @@ def extract_artist_id(u_input):
 # List Presaved Artist Function
 def list_artists(author):
     presaved_artists = load_ps_artist()
+    user_saved_artists = []
+    for _, artists in presaved_artists.items():
+        user_saved_artists.extend(artists)
+        
     embed = discord.Embed(
         title="Saved Artists",
-        description="List of presaved artists (use help find out how to save artists)",
+        description=f"List of {author.display_name} presaved artists (use help find out how to save artists)",
         color=discord.Color.green(),
     )
     avatar_url = author.avatar.url
-    embed.set_footer(text=f"Requested by {author}", icon_url=avatar_url)
-    for index, a in enumerate(presaved_artists):
+    for index, a in enumerate(user_saved_artists):
         embed.add_field(name=f"`{index+1}` - {a["artist"]}", value=f"Artist ID: `{a["artist_url"]}`", inline=False)
+    embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
     return embed
 
-def format_get_artist(response):
+def format_get_artist(author, response):
     # Create an embed object
     artist_name = response['name']
     remaining_space = 56 - len(artist_name) - len("[Artist Information for ]")
@@ -136,7 +150,8 @@ def format_get_artist(response):
     if response['genres']:
         embed.add_field(name="Genres", value=f"`{'\n'.join(response['genres'])}`", inline=True)
     embed.add_field(name="Full Spotify URI", value=f"`{response['uri']}`", inline=False)
-
+    avatar_url = author.avatar.url
+    embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
     return embed
 
 def create_track_embed(data):
@@ -243,11 +258,12 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
             artisturi = extract_artist_id(u_input)
             
             if artisturi == "use_saved" and isinstance(call_type, discord.Message):
+                
                 listembed = list_artists(author)
                 await reply_type("Please specify (by number) which saved artist you want to retrieve:", embed=listembed)
                 # Await for user input
                 interaction_msg = await wait_for_user_input(call_type, author, bot)
-                artisturi, fail = retrieve_saved(interaction_msg)
+                artisturi, fail = retrieve_saved(author, interaction_msg)
                 if fail:
                     await reply_type(fail)
                     return
@@ -260,25 +276,31 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
 
         # API Request to Fetch Artist Data
         data, response_code = await spotifyapi.request_artist_info(artisturi, token)
-        
         track_data, response_code_two = await spotifyapi.request_artist_toptracks(artisturi, token)
         
         if data and response_code == 200:
-            embedget = format_get_artist(data)
-            await reply_type(embed=embedget)
+            allembeds = []
+            allembeds.append(format_get_artist(author, data))
+            msg = await reply_type(embed=allembeds[0])
+            if track_data and response_code_two == 200:
+                allembeds.append(create_track_embed(track_data))
+                msg
+            if isinstance(call_type, discord.Message):
+                await msg.add_reaction("⬅️")
+                await msg.add_reaction("➡️")
+                return
+            else:
+                return
         else:
             bot_msg = "Invalid artist URI." if response_code == 400 else f"API Request failed with status code {response_code}"
             await reply_type(bot_msg)
             
-        if track_data and response_code_two == 200:
-            tembed_get = create_track_embed(track_data)
-            await reply_type(embed=tembed_get[0])
-        return
+
 
     await reply_type(f"The parameter of the info command `{searchtarget}` is invalid.")
 
 # Temporary Save Artist (Will Update Later)
-async def save(call_type, savetarget, u_input, token, *args):
+async def save(call_type, author, savetarget, u_input, token, *args):
     reply_type = get_reply_method(call_type)
     
     if savetarget.lower() == 'artists':
@@ -292,7 +314,7 @@ async def save(call_type, savetarget, u_input, token, *args):
             if data and response_code == 200:
                 artistname = data.get('name', 'Unknown Artist')
                 # Save artist info
-                statusmsg = append_saved(artisturi, artistname)
+                statusmsg = append_saved(author, artisturi, artistname)
             else:
                 # Handle invalid or failed API responses
                 statusmsg = (
