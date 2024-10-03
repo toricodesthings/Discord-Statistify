@@ -4,6 +4,12 @@ WIP Spotify Statistics Discord Bot utilizing Spotify Web API
 
 This is a work-in-progress discord that connects with Spotify's Web API to retrieve data about artists, playlist, songs, and many more retrievable data. Web API Access is built in and requires no premade libraries, however, users will need to create both a Discord Web Application and Spotify Web Application in their respective developer portals for the bot to function. See sections "Preparation" for more info and see section "Library Requirements" to install the required python libraries.
 
+# Features to build:
+- Search function based on given name
+- Track data fetch and audio analysis
+- Expand get command to playlist
+- Expand save command to tracks, and make it per user based
+
 # Lib Links 
 - https://pypi.org/project/aiohttp/
 - https://pypi.org/project/discord.py/
