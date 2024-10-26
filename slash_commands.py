@@ -30,6 +30,11 @@ async def setup_slash_commands(token, bot):
         author = interaction.user
         await b_commands.get(interaction, author, bot, "artists", id, access_token)
         
+    @tree.command(name="get_artist_saved", description="Retrieve info of Saved Artists")
+    async def slash_command(interaction: discord.Interaction, id: str):    
+        author = interaction.user
+        await b_commands.get(interaction, author, bot, "artists", "saved", access_token)
+        
     @tree.command(name="save_artist_byid", description="Save Artist by URI code")
     @discord.app_commands.describe(id="Enter the Artist URI, URL, or Artist ID:")
     async def slash_command(interaction: discord.Interaction, id: str):    

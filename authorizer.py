@@ -2,8 +2,6 @@ import os, json, time
 import apiwrapper as spotifyapi
 from datetime import datetime
 
-
-
 #TERMINAL COLOR CODE
 RED, GREEN, LIGHT_BLUE, RESET = "\033[91m", "\033[92m", "\033[94m", "\033[0m" 
 

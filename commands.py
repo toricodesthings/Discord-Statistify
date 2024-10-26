@@ -1,6 +1,7 @@
 import discord, json, os, asyncio
 import apiwrapper as spotifyapi
 from urllib.parse import urlparse
+from discord.ui import View, Select
 
 # -------------------Automatic Commands on_ready()----------------------------
 
@@ -106,23 +107,14 @@ def extract_artist_id(u_input):
 
     raise ValueError("The artist parameter must be a valid Spotify URI, URL, or Artist ID")
         
-# List Presaved Artist Function
-def list_artists(author):
+# Retrieve a List of Presaved Artist Function
+def retrieve_artists():
     presaved_artists = load_ps_artist()
     user_saved_artists = []
     for _, artists in presaved_artists.items():
         user_saved_artists.extend(artists)
-        
-    embed = discord.Embed(
-        title="Saved Artists",
-        description=f"List of {author.display_name} presaved artists (use help find out how to save artists)",
-        color=discord.Color.green(),
-    )
-    avatar_url = author.avatar.url
-    for index, a in enumerate(user_saved_artists):
-        embed.add_field(name=f"`{index+1}` - {a["artist"]}", value=f"Artist ID: `{a["artist_url"]}`", inline=False)
-    embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
-    return embed
+    
+    return user_saved_artists
 
 def format_get_artist(author, response):
     # Create an embed object
@@ -152,6 +144,19 @@ def format_get_artist(author, response):
     embed.add_field(name="Full Spotify URI", value=f"`{response['uri']}`", inline=False)
     avatar_url = author.avatar.url
     embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
+    return embed
+
+def format_list_artist(author, saved_artists_list):
+    embed = discord.Embed(
+        title="Saved Artists",
+        description=f"List of {author.display_name} presaved artists (use help find out how to save artists)",
+        color=discord.Color.green(),
+    )
+    avatar_url = author.avatar.url
+    for index, a in enumerate(saved_artists_list):
+        embed.add_field(name=f"`{index+1}` - {a["artist"]}", value=f"Artist ID: `{a["artist_url"]}`", inline=False)
+    embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
+
     return embed
 
 def create_track_embed(data):
@@ -189,6 +194,38 @@ def create_track_embed(data):
     
     return embeds
 # ------------------- BOT ASYNC FUNCTIONS ----------------------------
+async def fetch_artists(call_type, artist_uri, author, token, reply_type, is_slash_withsaved):
+
+    # Fetch artist information and top tracks
+    data, response_code = await spotifyapi.request_artist_info(artist_uri, token)
+    track_data, response_code_two = await spotifyapi.request_artist_toptracks(artist_uri, token)
+
+    if data and response_code == 200:
+        allembeds = [format_get_artist(author, data)]
+
+        # Send the first embed with the artist info
+        if is_slash_withsaved:
+            msg = await call_type.edit_original_response(content = "Fetching...", view = None)
+            msg = await call_type.followup.send(embed = allembeds[0], ephemeral=False)
+        else:
+            msg = await reply_type(embed=allembeds[0])
+
+        # Add track data if available
+        if track_data and response_code_two == 200:
+            allembeds.append(create_track_embed(track_data))
+
+        # Add reactions if this is a message-based call
+        if isinstance(call_type, discord.Message):
+            await msg.add_reaction("⬅️")
+            await msg.add_reaction("➡️")
+        return  # End after processing
+
+    # Error Handling
+    bot_msg = (
+        "Invalid artist URI." if response_code == 400 
+        else f"API Request failed with status code {response_code}"
+    )
+    await reply_type(bot_msg)
 
 async def wait_for_user_input(call_type, author, bot):
     def check(m):
@@ -200,6 +237,36 @@ async def wait_for_user_input(call_type, author, bot):
     except asyncio.TimeoutError:
         reply_type = get_reply_method(call_type)
         await reply_type("Sorry, you took too long to respond. Please try again.")
+        
+async def generate_artist_dropdown(author, call_type, saved_artists, token, reply_type):
+    selections = Select(
+        placeholder="Select an artist...",
+        min_values=1,
+        max_values=1,
+        options=[
+            discord.SelectOption(label=artist["artist"], value=artist["artist_url"])
+            for artist in saved_artists
+        ]
+    )
+    async def select_callback(interaction: discord.Interaction):
+        artisturi = selections.values[0]
+        selections.disabled = True
+        view = View()
+        view.add_item(selections)
+        await fetch_artists(call_type, artisturi, author, token, reply_type, True)
+        
+    selections.callback = select_callback
+
+    # Create a Dropdown View and add the select to it
+    view = View()
+    view.add_item(selections)
+
+    # Send the dropdown menu to the user
+    await reply_type(
+        "Please specify which saved artist you want to retrieve:",
+        view=view,
+        ephemeral=True
+    )
 
 # Bot Latency Function
 async def ping(call_type, bot):
@@ -240,7 +307,9 @@ Example: `s!save artists` [Spotify URL, URI or Direct ID]
 
 # List Saved Artists
 async def list(call_type, author, listtarget, *args):
-    listembed = list_artists(author)
+    saved_artists_list = retrieve_artists()
+    listembed = format_list_artist(author, saved_artists_list)
+    
     reply_type = get_reply_method(call_type)
     if_error = f"The parameter of the list function `{listtarget}` is invalid."
     if listtarget.lower() == 'artists':
@@ -259,7 +328,8 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
             
             if artisturi == "use_saved" and isinstance(call_type, discord.Message):
                 
-                listembed = list_artists(author)
+                saved_artists_list = retrieve_artists()
+                listembed = format_list_artist(author, saved_artists_list)
                 await reply_type("Please specify (by number) which saved artist you want to retrieve:", embed=listembed)
                 # Await for user input
                 interaction_msg = await wait_for_user_input(call_type, author, bot)
@@ -267,35 +337,19 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
                 if fail:
                     await reply_type(fail)
                     return
+                
             elif artisturi == "use_saved" and isinstance(call_type, discord.Interaction):
-                await reply_type("Please specify (by number) which saved artist you want to retrieve:")
+                
+                saved_artists_list = retrieve_artists()
+                
+                await generate_artist_dropdown(author, call_type, saved_artists_list, token, reply_type)
                 return
+            
         except ValueError as value_error:
             await reply_type(value_error)
             return
 
-        # API Request to Fetch Artist Data
-        data, response_code = await spotifyapi.request_artist_info(artisturi, token)
-        track_data, response_code_two = await spotifyapi.request_artist_toptracks(artisturi, token)
-        
-        if data and response_code == 200:
-            allembeds = []
-            allembeds.append(format_get_artist(author, data))
-            msg = await reply_type(embed=allembeds[0])
-            if track_data and response_code_two == 200:
-                allembeds.append(create_track_embed(track_data))
-                msg
-            if isinstance(call_type, discord.Message):
-                await msg.add_reaction("⬅️")
-                await msg.add_reaction("➡️")
-                return
-            else:
-                return
-        else:
-            bot_msg = "Invalid artist URI." if response_code == 400 else f"API Request failed with status code {response_code}"
-            await reply_type(bot_msg)
-            
-
+        await fetch_artists(call_type, artisturi, author, token, reply_type, False)
 
     await reply_type(f"The parameter of the info command `{searchtarget}` is invalid.")
 
