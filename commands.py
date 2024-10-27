@@ -230,6 +230,8 @@ def format_track_embed(data):
         album = track['album']
         album_name = album['name']
         track_name = track['name']
+        track_url = track['external_urls']['spotify']
+        popularity = track.get('popularity', 'N/A')
         
         artist_names = ", ".join(artist['name'] for artist in track['artists'])
 
@@ -238,8 +240,6 @@ def format_track_embed(data):
 
         # Format the track duration
         duration = format_track_duration(track['duration_ms'])
-
-        track_url = track['external_urls']['spotify']
 
         # Check if the album contains multiple tracks
         if album['total_tracks'] > 1:
@@ -250,17 +250,18 @@ def format_track_embed(data):
 
         embed = discord.Embed(
             title=f"{album_name}",
-            description=(
-                f"**Artist(s):** {artist_names}\n"
-                f"**Duration:** {duration}\n"
-                f"{track_list}"
-            ),
             color=discord.Color.blue()
         )
         
         embed.set_thumbnail(url=album['images'][0]['url'])
-        embed.add_field(name="Release Date", value=album['release_date'], inline=False)
-        embed.add_field(name="Listen on Spotify", value=f"[Click here]({track_url})", inline=False)
+
+        # Add fields with inline alignment
+        embed.add_field(name="Spotify URL", value=track_url, inline=False)
+        embed.add_field(name="Artist(s)", value=f"`{artist_names}`", inline=False)
+        embed.add_field(name="Duration", value=f"`{duration}`", inline=True)
+        embed.add_field(name="Popularity", value=f"`{popularity}/100`", inline=True)
+        embed.add_field(name="Release Date", value=f"`{album['release_date']}`", inline=True)
+        
         embeds.append(embed)
     
     return embeds
