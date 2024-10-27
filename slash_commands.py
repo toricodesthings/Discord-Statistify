@@ -39,7 +39,7 @@ async def setup_slash_commands(token, bot):
     @discord.app_commands.describe(id="Enter the Artist URI, URL, or Artist ID:")
     async def slash_command(interaction: discord.Interaction, id: str):    
         author = interaction.user
-        await b_commands.save(interaction, "artists", id, access_token)
+        await b_commands.save(interaction, author, "artists", id, access_token)
         
     synced = await tree.sync()  # Sync commands with Discord
     return synced

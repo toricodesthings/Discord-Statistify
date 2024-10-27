@@ -1,13 +1,72 @@
 import discord, json, os, asyncio
 import apiwrapper as spotifyapi
 from urllib.parse import urlparse
-from discord.ui import View, Select
+from discord.ui import View, Select, Button
 
-# -------------------Automatic Commands on_ready()----------------------------
+# -------------------DISCORD UI Generation----------------------------
+async def generate_artist_dropdown(author, call_type, saved_artists, token, reply_type):
+    selections = Select(
+        placeholder="Select an artist...",
+        min_values=1,
+        max_values=1,
+        options=[
+            discord.SelectOption(label=artist["artist"], value=artist["artist_url"])
+            for artist in saved_artists
+        ]
+    )
+    
+    async def select_callback(interaction: discord.Interaction):
+        artisturi = selections.values[0]
+        selections.disabled = True
+        view = View()
+        view.add_item(selections)
+        await fetch_artists(call_type, artisturi, author, token, reply_type, True)
+        
+    selections.callback = select_callback
+    view = View()
+    view.add_item(selections)
 
+    # Send the dropdown menu to the user
+    await reply_type(
+        "Please specify which saved artist you want to retrieve:",
+        view=view,
+        ephemeral=True
+    )
+    
+async def generate_artists_get_buttons(call_type, allembeds, reply_type, msg):
+    
+    if not len(allembeds) > 1:
+        return
+    state = {"current_page": 0}
+    
+    async def prev_click(call_type):
+        if state["current_page"] > 0:
+            state["current_page"] -= 1
+            await update_embed(call_type)
 
+    async def next_click(call_type):
+        if state["current_page"] < len(allembeds) - 1:
+            state["current_page"] += 1
+            await update_embed(call_type)
+    
+    async def update_embed(call_type):
+        prev_button.disabled = state["current_page"] == 0
+        next_button.disabled = state["current_page"] == len(allembeds) - 1
+        
+        page = int(state["current_page"])
+        await msg.edit(embed=allembeds[page], view=view)
+        await call_type.response.defer()
 
-
+    prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
+    next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
+    prev_button.callback = prev_click
+    next_button.callback = next_click
+    view = View()
+    view.add_item(prev_button)
+    view.add_item(next_button)
+            
+    await msg.edit(embed=allembeds[0], view=view)
+        
 # ------------------- Non ASYNC FUNCTIONS ----------------------------
 
 def identify_commands(ctx):
@@ -35,6 +94,11 @@ def load_ps_artist():
         print("savedartists.json not found, make sure it's not deleted.")
     except json.JSONDecodeError:
         return []
+
+def format_track_duration(ms):
+    minutes = ms // 60000
+    seconds = (ms % 60000) // 1000
+    return f"{minutes}:{seconds:02}"
 
 def modify_ps_artist(new_artist):    
     file_path = os.path.join(os.path.dirname(__file__), 'savedartists.json')
@@ -159,37 +223,44 @@ def format_list_artist(author, saved_artists_list):
 
     return embed
 
-def create_track_embed(data):
+def format_track_embed(data):
     embeds = []
+    
     for track in data['tracks']:
         album = track['album']
         album_name = album['name']
         track_name = track['name']
-        artist_name = track['artists'][0]['name']
         
+        artist_names = ", ".join(artist['name'] for artist in track['artists'])
+
         # Ignore track name if it matches the album name
         display_track_name = "" if album_name == track_name else track_name
-        
+
+        # Format the track duration
+        duration = format_track_duration(track['duration_ms'])
+
+        track_url = track['external_urls']['spotify']
+
         # Check if the album contains multiple tracks
         if album['total_tracks'] > 1:
-            # List all tracks (just simulating a placeholder here since no full album info is given in this data)
+            # Placeholder (will update once albumn retrieval is implemented)
             track_list = "\n".join([f"Track {i+1}: Placeholder Track Name" for i in range(album['total_tracks'])])
         else:
             track_list = display_track_name or "Single"
-        
-        # Create the embed for the track
+
         embed = discord.Embed(
-            title=album_name,
-            description=f"Artist: {artist_name}\n{track_list}",
+            title=f"{album_name}",
+            description=(
+                f"**Artist(s):** {artist_names}\n"
+                f"**Duration:** {duration}\n"
+                f"{track_list}"
+            ),
             color=discord.Color.blue()
         )
         
-        # Add album cover image
         embed.set_thumbnail(url=album['images'][0]['url'])
-        
-        # Add additional details
         embed.add_field(name="Release Date", value=album['release_date'], inline=False)
-        
+        embed.add_field(name="Listen on Spotify", value=f"[Click here]({track_url})", inline=False)
         embeds.append(embed)
     
     return embeds
@@ -203,29 +274,33 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_type, is_sla
     if data and response_code == 200:
         allembeds = [format_get_artist(author, data)]
 
-        # Send the first embed with the artist info
+        if track_data and response_code_two == 200:
+            allembeds.extend(format_track_embed(track_data))
+
         if is_slash_withsaved:
-            msg = await call_type.edit_original_response(content = "Fetching...", view = None)
+            await call_type.edit_original_response(content = "Fetching...", view = None)
             msg = await call_type.followup.send(embed = allembeds[0], ephemeral=False)
         else:
-            msg = await reply_type(embed=allembeds[0])
+            if isinstance(call_type, discord.Interaction):
+                await reply_type(embed=allembeds[0], ephemeral=False)
+                msg = await call_type.original_response()
+            else:
+                msg = await reply_type(embed=allembeds[0])
 
-        # Add track data if available
-        if track_data and response_code_two == 200:
-            allembeds.append(create_track_embed(track_data))
-
-        # Add reactions if this is a message-based call
-        if isinstance(call_type, discord.Message):
-            await msg.add_reaction("⬅️")
-            await msg.add_reaction("➡️")
+        # Add buttons to move pages
+        await generate_artists_get_buttons(call_type, allembeds, reply_type, msg)
+        
         return  # End after processing
 
-    # Error Handling
+    # Error Handling 
     bot_msg = (
         "Invalid artist URI." if response_code == 400 
         else f"API Request failed with status code {response_code}"
     )
-    await reply_type(bot_msg)
+    if is_slash_withsaved:
+        await call_type.followup.send(content = bot_msg, ephemeral=False)
+    else:
+        await reply_type(bot_msg)
 
 async def wait_for_user_input(call_type, author, bot):
     def check(m):
@@ -237,36 +312,6 @@ async def wait_for_user_input(call_type, author, bot):
     except asyncio.TimeoutError:
         reply_type = get_reply_method(call_type)
         await reply_type("Sorry, you took too long to respond. Please try again.")
-        
-async def generate_artist_dropdown(author, call_type, saved_artists, token, reply_type):
-    selections = Select(
-        placeholder="Select an artist...",
-        min_values=1,
-        max_values=1,
-        options=[
-            discord.SelectOption(label=artist["artist"], value=artist["artist_url"])
-            for artist in saved_artists
-        ]
-    )
-    async def select_callback(interaction: discord.Interaction):
-        artisturi = selections.values[0]
-        selections.disabled = True
-        view = View()
-        view.add_item(selections)
-        await fetch_artists(call_type, artisturi, author, token, reply_type, True)
-        
-    selections.callback = select_callback
-
-    # Create a Dropdown View and add the select to it
-    view = View()
-    view.add_item(selections)
-
-    # Send the dropdown menu to the user
-    await reply_type(
-        "Please specify which saved artist you want to retrieve:",
-        view=view,
-        ephemeral=True
-    )
 
 # Bot Latency Function
 async def ping(call_type, bot):
@@ -330,10 +375,13 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
                 
                 saved_artists_list = retrieve_artists()
                 listembed = format_list_artist(author, saved_artists_list)
+                
                 await reply_type("Please specify (by number) which saved artist you want to retrieve:", embed=listembed)
+                
                 # Await for user input
                 interaction_msg = await wait_for_user_input(call_type, author, bot)
                 artisturi, fail = retrieve_saved(author, interaction_msg)
+                
                 if fail:
                     await reply_type(fail)
                     return
@@ -341,7 +389,6 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
             elif artisturi == "use_saved" and isinstance(call_type, discord.Interaction):
                 
                 saved_artists_list = retrieve_artists()
-                
                 await generate_artist_dropdown(author, call_type, saved_artists_list, token, reply_type)
                 return
             
@@ -350,8 +397,9 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
             return
 
         await fetch_artists(call_type, artisturi, author, token, reply_type, False)
-
-    await reply_type(f"The parameter of the info command `{searchtarget}` is invalid.")
+        return
+        
+    await reply_type(f"The parameter of the get command `{searchtarget}` is invalid.")
 
 # Temporary Save Artist (Will Update Later)
 async def save(call_type, author, savetarget, u_input, token, *args):
@@ -363,7 +411,6 @@ async def save(call_type, author, savetarget, u_input, token, *args):
             
             # API Request to Fetch Artist Data
             data, response_code = await spotifyapi.request_artist_info(artisturi, token)
-            
             
             if data and response_code == 200:
                 artistname = data.get('name', 'Unknown Artist')
