@@ -59,6 +59,7 @@ async def generate_artists_get_buttons(call_type, allembeds, reply_type, msg):
 
     prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
     next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
+    prev_button.disabled
     prev_button.callback = prev_click
     next_button.callback = next_click
     view = View()
