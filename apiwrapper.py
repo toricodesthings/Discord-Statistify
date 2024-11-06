@@ -66,3 +66,45 @@ async def request_artist_toptracks(artisturi, token):
                 data = await response.json()
                 return data, response.status
             return None, response.status
+        
+#API Req #4: Get List of Tracks inside an Album
+async def request_album_tracklist(albumid, token):
+    global web_endpoint
+    url = f"{web_endpoint}/v1/albums/{albumid}/tracks"
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers = headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data, response.status
+            return None, response.status
+        
+async def request_track_info(trackid, token):
+    global web_endpoint
+    url = f"{web_endpoint}/v1/tracks/{trackid}"
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }            
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers = headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data, response.status
+            return None, response.status
+        
+async def request_track_audiofeatures(trackid, token):
+    global web_endpoint
+    url = f"{web_endpoint}/v1/audio-features/{trackid}"
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }            
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers = headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data, response.status
+            return None, response.status
+    
