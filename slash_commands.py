@@ -34,12 +34,20 @@ async def setup_slash_commands(token, bot):
     async def slash_command(interaction: discord.Interaction, id: str):    
         author = interaction.user
         await b_commands.get(interaction, author, bot, "artists", "saved", access_token)
+    
+    @tree.command(name="get_track_byid", description="Search and Retrieve Track by URI code")
+    @discord.app_commands.describe(id="Enter the Track URI, URL, or ID:")
+    async def slash_command(interaction: discord.Interaction, id: str):    
+        author = interaction.user
+        await b_commands.get(interaction, author, bot, "tracks", id, access_token)
         
     @tree.command(name="save_artist_byid", description="Save Artist by URI code")
-    @discord.app_commands.describe(id="Enter the Artist URI, URL, or Artist ID:")
+    @discord.app_commands.describe(id="Enter the Artist URI, URL, or ID:")
     async def slash_command(interaction: discord.Interaction, id: str):    
         author = interaction.user
         await b_commands.save(interaction, author, "artists", id, access_token)
+        
+
         
     synced = await tree.sync()  # Sync commands with Discord
     return synced
