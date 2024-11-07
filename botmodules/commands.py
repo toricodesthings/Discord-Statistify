@@ -13,7 +13,6 @@ class CustomView(View):
         self.msg = None
 
     def set_message(self, msg):
-        """Associates the message with the view."""
         self.msg = msg
 
 #Generate Dropdown when Calling
@@ -82,7 +81,7 @@ async def generate_track_selection(author, call_type, track_items, token, reply_
 #0-----------------------------------------------------------------------------------------------------------------------
 
 #Generate Previous and Next Buttons for Get Command - Artists Module
-async def generate_artists_get_buttons(call_type, allembeds, reply_func, msg):
+async def generate_artists_get_buttons(author, call_type, allembeds, track_items, reply_func, token):
     
     if not len(allembeds) > 1:
         return
@@ -97,25 +96,42 @@ async def generate_artists_get_buttons(call_type, allembeds, reply_func, msg):
         if state["current_page"] < len(allembeds) - 1:
             state["current_page"] += 1
             await update_embed(call_type)
+
+    async def track_info_click(call_type):
+        await generate_track_selection(author, call_type, track_items, token, reply_func)
+        await call_type.response.defer()
     
     async def update_embed(call_type):
+    
         prev_button.disabled = state["current_page"] == 0
         next_button.disabled = state["current_page"] == len(allembeds) - 1
         
         page = int(state["current_page"])
-        await msg.edit(embed=allembeds[page], view=view)
+    
+        if page > 0:
+            
+            view.remove_item(next_button)
+            view.add_item(get_track_info_button)
+            view.add_item(next_button)
+        else:
+            view.remove_item(get_track_info_button)
+       
+
+        await view.msg.edit(embed=allembeds[page], view=view)
         await call_type.response.defer()
 
     prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
     next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
-    prev_button.disabled = True
+    get_track_info_button = Button(label="Get Track Info", style=discord.ButtonStyle.secondary)
+    get_track_info_button.callback = track_info_click
     prev_button.callback = prev_click
     next_button.callback = next_click
-    view = View()
+    prev_button.disabled = True
+    view = CustomView()
     view.add_item(prev_button)
     view.add_item(next_button)
             
-    await msg.edit(embed=allembeds[0], view=view)
+    return view
     
 #Generate Previous and Next Buttons for Get Command - Tracks Module
 async def generate_tracks_get_buttons(call_type, allembeds, reply_func):
@@ -125,6 +141,7 @@ async def generate_tracks_get_buttons(call_type, allembeds, reply_func):
     state = {"current_page": 0}
     msg: None
     
+
     async def prev_click(call_type):
         if state["current_page"] > 0:
             state["current_page"] -= 1
@@ -139,7 +156,7 @@ async def generate_tracks_get_buttons(call_type, allembeds, reply_func):
         prev_button.disabled = state["current_page"] == 0
         next_button.disabled = state["current_page"] == len(allembeds) - 1
         
-        page = int(state["current_page"])
+        page = int(state["current_page"]) 
         await view.msg.edit(embed=allembeds[page], view=view)
         await call_type.response.defer()
 
@@ -156,86 +173,100 @@ async def generate_tracks_get_buttons(call_type, allembeds, reply_func):
     return view
 
 #Generate Previous and Next Buttons for Get Command - Tracks Module
-async def generate_playlists_get_buttons(call_type, allembeds, reply_func, msg):
+async def generate_playlists_get_buttons(author, call_type, allembeds, track_items, reply_func, token):
     
-    if not len(allembeds) > 1:
-        return
-    state = {"current_page": 0}
-    
-    async def prev_click(call_type):
-        if state["current_page"] > 0:
-            state["current_page"] -= 1
-            await update_embed(call_type)
-
-    async def next_click(call_type):
-        if state["current_page"] < len(allembeds) - 1:
-            state["current_page"] += 1
-            await update_embed(call_type)
-    
-    async def update_embed(call_type):
-        prev_button.disabled = state["current_page"] == 0
-        next_button.disabled = state["current_page"] == len(allembeds) - 1
+    view = CustomView()
         
-        page = int(state["current_page"])
-        await msg.edit(embed=allembeds[page], view=view)
-        await call_type.response.defer()
-
-    prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
-    next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
-    prev_button.disabled = True
-    prev_button.callback = prev_click
-    next_button.callback = next_click
-    view = View()
-    view.add_item(prev_button)
-    view.add_item(next_button)
-            
-    await msg.edit(embed=allembeds[0], view=view)
-    
-#Generate Previous and Next Buttons for Get Command - Tracks Module
-async def generate_albums_get_buttons(author, call_type, allembeds, track_items, reply_func, token, msg):
-    
-    if not len(allembeds) > 1:
-        return
-    state = {"current_page": 0}
-    
-    async def prev_click(call_type):
-        if state["current_page"] > 0:
-            state["current_page"] -= 1
-            await update_embed(call_type)
-
-    async def next_click(call_type):
-        if state["current_page"] < len(allembeds) - 1:
-            state["current_page"] += 1
-            await update_embed(call_type)
-    
     async def track_info_click(call_type):
-        
         await generate_track_selection(author, call_type, track_items, token, reply_func)
         await call_type.response.defer()
-    
-    async def update_embed(call_type):
-        prev_button.disabled = state["current_page"] == 0
-        next_button.disabled = state["current_page"] == len(allembeds) - 1
         
-        page = int(state["current_page"])
-        await msg.edit(embed=allembeds[page], view=view)
-        
-
-    prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
-    next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
     get_track_info_button = Button(label="Get Track Info", style=discord.ButtonStyle.secondary)
-    
-    prev_button.disabled = True
     get_track_info_button.callback = track_info_click
-    prev_button.callback = prev_click
-    next_button.callback = next_click
-    view = View()
-    view.add_item(prev_button)
-    view.add_item(get_track_info_button)
-    view.add_item(next_button)
-    
-    await msg.edit(embed=allembeds[0], view=view)
+
+    if len(allembeds) > 1:
+        state = {"current_page": 0}
+        async def prev_click(call_type):
+            if state["current_page"] > 0:
+                state["current_page"] -= 1
+                await update_embed(call_type)
+
+        async def next_click(call_type):
+            if state["current_page"] < len(allembeds) - 1:
+                state["current_page"] += 1
+                await update_embed(call_type)
+                
+        async def update_embed(call_type):
+            prev_button.disabled = state["current_page"] == 0
+            next_button.disabled = state["current_page"] == len(allembeds) - 1
             
+            page = int(state["current_page"])
+            await view.msg.edit(embed=allembeds[page], view=view)
+            await call_type.response.defer()
+
+        prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
+        next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
+    
+        prev_button.disabled = True
+    
+        prev_button.callback = prev_click
+        next_button.callback = next_click
+        view.add_item(prev_button)
+        view.add_item(get_track_info_button)
+        view.add_item(next_button)
+    else:
+        
+        view.add_item(get_track_info_button)
+
+    return view
+    
+#Generate Previous and Next Buttons for Get Command - Tracks Module
+async def generate_albums_get_buttons(author, call_type, allembeds, track_items, reply_func, token):
+    
+    view = CustomView()
+        
+    async def track_info_click(call_type):
+        await generate_track_selection(author, call_type, track_items, token, reply_func)
+        await call_type.response.defer()
+        
+    get_track_info_button = Button(label="Get Track Info", style=discord.ButtonStyle.secondary)
+    get_track_info_button.callback = track_info_click
+
+    if len(allembeds) > 1:
+        state = {"current_page": 0}
+        async def prev_click(call_type):
+            if state["current_page"] > 0:
+                state["current_page"] -= 1
+                await update_embed(call_type)
+
+        async def next_click(call_type):
+            if state["current_page"] < len(allembeds) - 1:
+                state["current_page"] += 1
+                await update_embed(call_type)
+                
+        async def update_embed(call_type):
+            prev_button.disabled = state["current_page"] == 0
+            next_button.disabled = state["current_page"] == len(allembeds) - 1
+            
+            page = int(state["current_page"])
+            await view.msg.edit(embed=allembeds[page], view=view)
+            await call_type.response.defer()
+
+        prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
+        next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
+    
+        prev_button.disabled = True
+    
+        prev_button.callback = prev_click
+        next_button.callback = next_click
+        view.add_item(prev_button)
+        view.add_item(get_track_info_button)
+        view.add_item(next_button)
+    else:
+        
+        view.add_item(get_track_info_button)
+
+    return view
     
         
 # ------------------- Non ASYNC FUNCTIONS ----------------------------
@@ -430,24 +461,26 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_sla
         allembeds = [embedder.format_get_artist(author, data)]
 
         if track_data and response_code_t == 200:
-            track_embeds_list = await embedder.format_track_embed(author, track_data, token)
+            track_embeds_list, tracks_list = await embedder.format_track_embed(author, track_data, token)
             allembeds.extend(track_embeds_list)
             track_fetch_failmsg = None
         else:
             track_fetch_failmsg = "Could you not fetch for track data, only artist data will be displayed"
+        
+        view = await generate_artists_get_buttons(author, call_type, allembeds, tracks_list, reply_func, token)
 
         if is_slash_withsaved:
             await call_type.edit_original_response(content = f"Selected {data["name"]}", view = None)
-            msg = await call_type.followup.send(content = track_fetch_failmsg, embed = allembeds[0], ephemeral=False)
+            msg = await call_type.followup.send(content = track_fetch_failmsg, embed = allembeds[0], view = view)
+            view.set_message(msg)
         else:
             if isinstance(call_type, discord.Interaction):
-                await reply_func(content = track_fetch_failmsg, embed=allembeds[0], ephemeral=False)
+                await reply_func(embed=allembeds[0], view = view)
                 msg = await call_type.original_response()
+                view.set_message(msg)
             else:
-                msg = await reply_func(embed=allembeds[0])
-
-    
-        await generate_artists_get_buttons(call_type, allembeds, reply_func)
+                msg = await reply_func(embed=allembeds[0], view = view)
+                view.set_message(msg)
         return  
     
     else:
@@ -459,8 +492,8 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_sla
             bot_msg = f"API Requests failed with status codes: {response_code_a} & {response_code_t}"
             
         if is_slash_withsaved:
-            await call_type.edit_original_response(content = "Fetching...", view = None)
-            await call_type.followup.send(content = bot_msg, ephemeral = False)
+            await call_type.edit_original_response(content = f"Selected {data["name"]}", view = None)
+            await call_type.followup.send(content = bot_msg)
 
         else:
             await reply_func(bot_msg)
@@ -485,6 +518,7 @@ async def fetch_track(call_type, track_uri, author, token, reply_func, dropdown_
                     view.set_message(msg)
             else:
                 msg = await call_type.original_response()
+                view.set_message(msg)
                 await msg.edit(embed=allembeds[0], view=view)
                 
             return
@@ -503,15 +537,17 @@ async def fetch_playlist(call_type, playlist_uri, author, token, reply_func):
     data, response_code = await spotifyapi.request_playlist_info(playlist_uri, token)
     
     if data and response_code == 200:
-        allembeds = embedder.format_get_playlist(author, data)
-        if isinstance(call_type, discord.Interaction):
-            await reply_func(embed = allembeds[0], ephemeral=False)
-            msg = await call_type.original_response()
-        else:
-            msg = await reply_func(embed=allembeds[0])
         
-        if len(allembeds) > 1:   
-            await generate_playlists_get_buttons(call_type, allembeds, reply_func, msg)
+        allembeds, track_lists = embedder.format_get_playlist(author, data)
+        view = await generate_playlists_get_buttons(author, call_type, allembeds, track_lists, reply_func, token)
+        
+        if isinstance(call_type, discord.Interaction):
+            await reply_func(embed=allembeds[0], view = view)
+            msg = await call_type.original_response()
+            view.set_message(msg)
+        else:
+            msg = await reply_func(embed=allembeds[0], view = view)
+            view.set_message(msg)
 
         return
         
@@ -528,13 +564,15 @@ async def fetch_albums(call_type, album_uri, author, token, reply_func, bot):
     data, response_code = await spotifyapi.request_album_info(album_uri, token)
     if data and response_code == 200:
         allembeds, track_lists = embedder.format_get_album(author, data)
-        if isinstance(call_type, discord.Interaction):
-            await reply_func(embed = allembeds[0], ephemeral=False)
-            msg = await call_type.original_response()
-        else:
-            msg = await reply_func(embed=allembeds[0])
+        view = await generate_albums_get_buttons(author, call_type, allembeds, track_lists, reply_func, token)
         
-        await generate_albums_get_buttons(author, call_type, allembeds, track_lists, reply_func, token, msg)
+        if isinstance(call_type, discord.Interaction):
+            await reply_func(embed=allembeds[0], view = view)
+            msg = await call_type.original_response()
+            view.set_message(msg)
+        else:
+            msg = await reply_func(embed=allembeds[0], view = view)
+            view.set_message(msg)
         
         return
             
@@ -596,8 +634,15 @@ async def help(call_type, author):
 Example: `s!list artists`
 =============================================================
 **`Get Artists`** retrieves artist info by `Spotify ID` or `Saved`
+**`Get Tracks`** retrieves track info by `Spotify ID` or `Saved`
+**`Get Playlists`** retrieves playlist info by `Spotify ID` or `Saved`
+**`Get Albums`** retrieves album info by `Spotify ID` or `Saved`
+**`Get Users`** retrieves user info by `Spotify ID` or `Saved`
+
 By ID Example: `s!get artists [Spotify URL, URI or Direct ID]`
 By Saved: `s!get artists saved` (Follow the prompt after)
+
+By Slash Command: `Type / and follow the prompt`
 =============================================================
 **`Save Artists`** saves an artist by `Spotify ID`
 Example: `s!save artists` [Spotify URL, URI or Direct ID]

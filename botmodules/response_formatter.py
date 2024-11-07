@@ -63,7 +63,7 @@ async def format_track_embed_helper_albums(albumid, token):
         
 async def format_track_embed(author, response, token):
     embeds = []
-    
+    tracks_list = []
     for track in response['tracks']:
         album = track['album']
         album_name = album['name']
@@ -72,6 +72,8 @@ async def format_track_embed(author, response, token):
         album_uri = album['uri']
         track_uri = track['uri']
         popularity = track.get('popularity', 'N/A')
+        
+        tracks_list.append((track_name, track_uri))
         
         artist_names = ", ".join(artist['name'] for artist in track['artists'])
 
@@ -120,7 +122,7 @@ async def format_track_embed(author, response, token):
         embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
         embeds.append(embed)
     
-    return embeds
+    return embeds, tracks_list
 
 def format_track_audiofeatures(author, response, audiofeatures_response, allembeds):
     album_name = response['album']['name']
@@ -240,8 +242,11 @@ def format_get_playlist(author, response):
     owner_url = response['owner']['external_urls']['spotify']
     playlist_url = response['external_urls']['spotify']
     
+    
+    
     # Formatting tracks
     track_list = []
+    track_list_for_dropdown = []
     for item in response['tracks']['items']:
         track_info = item['track']
         track_name = track_info['name']
@@ -249,6 +254,7 @@ def format_get_playlist(author, response):
         artists = ", ".join(artist['name'] for artist in track_info['artists'])
         track_list.append(f"**{track_name}** by `{artists}` | [Link]({track_url})\n")
 
+        track_list_for_dropdown.append((track_name, track_url))
     embeds = []
     max_first_embed_tracks = 8  
     max_following_embed_tracks = 10  
@@ -293,7 +299,7 @@ def format_get_playlist(author, response):
             embeds.append(embed)
             page_number += 1
 
-    return embeds
+    return embeds, track_list_for_dropdown
 
 def format_get_user(author, response):
     # Extracting user data from the response
@@ -328,7 +334,6 @@ def format_get_album(author, response):
     # Extracting album data from the response
     album_name = response.get("name", "Unknown Album")
     album_url = response["external_urls"]["spotify"]
-    album_type = response.get("album_type", "Unknown").capitalize()
     total_tracks = response.get("total_tracks", 0)
     release_date = response.get("release_date", "Unknown Date")
     album_image_url = response["images"][0]["url"] if response["images"] else None
@@ -350,8 +355,7 @@ def format_get_album(author, response):
 
         # Format each track entry
         track_list.append(
-            f"**{track_name}** by `{track_artists}` | [Link]({track_url})\n"
-            f"*URI:* `{track_uri}`"
+            f"**{track_name}** by `{track_artists}` | [Link]({track_url})"
         )
         
         track_list_for_dropdown.append((track_name, track_uri))
@@ -404,7 +408,7 @@ def format_get_album(author, response):
             )
             if album_image_url:
                 embed.set_thumbnail(url=album_image_url)
-            embed.add_field(name="Tracks List", value="\n\n".join(remaining_tracks[i:i + max_following_embed_tracks]), inline=False)
+            embed.add_field(name="Tracks List", value="\n".join(remaining_tracks[i:i + max_following_embed_tracks]), inline=False)
             embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
             
             embeds.append(embed)
