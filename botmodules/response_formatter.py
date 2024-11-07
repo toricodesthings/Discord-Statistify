@@ -249,12 +249,10 @@ def format_get_playlist(author, response):
         artists = ", ".join(artist['name'] for artist in track_info['artists'])
         track_list.append(f"**{track_name}** by `{artists}` | [Link]({track_url})\n")
 
-    # Embed list initialization
     embeds = []
-    max_first_embed_tracks = 8  # Max tracks for the first embed
-    max_following_embed_tracks = 10  # Max tracks for subsequent embeds
+    max_first_embed_tracks = 8  
+    max_following_embed_tracks = 10  
 
-    # Create the first embed with up to the first 10 tracks
     first_embed_tracks = track_list[:max_first_embed_tracks]
     track_field_value = "\n".join(first_embed_tracks)
     
@@ -297,3 +295,119 @@ def format_get_playlist(author, response):
 
     return embeds
 
+def format_get_user(author, response):
+    # Extracting user data from the response
+    display_name = response.get("display_name", "Unknown User")
+    profile_url = response["external_urls"]["spotify"]
+    follower_count = response["followers"]["total"]
+    user_id = response["id"]
+    uri = response["uri"]
+    profile_image_url = response["images"][0]["url"] if response["images"] else None
+
+    # Create the Discord embed
+    embed = discord.Embed(
+        title=display_name,
+        description=f"[Spotify Profile]({profile_url})",
+        color=discord.Color.green()
+    )
+
+    if profile_image_url:
+        embed.set_thumbnail(url=profile_image_url)
+
+    # Add fields for detailed information
+    embed.add_field(name="Followers", value=f"`{follower_count}`", inline=True)
+    embed.add_field(name="User ID", value=f"`{user_id}`", inline=True)
+    embed.add_field(name="Spotify URI", value=f"`{uri}`", inline=False)
+
+    avatar_url = author.avatar.url if author.avatar else None
+    embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
+
+    return embed
+
+def format_get_album(author, response):
+    # Extracting album data from the response
+    album_name = response.get("name", "Unknown Album")
+    album_url = response["external_urls"]["spotify"]
+    album_type = response.get("album_type", "Unknown").capitalize()
+    total_tracks = response.get("total_tracks", 0)
+    release_date = response.get("release_date", "Unknown Date")
+    album_image_url = response["images"][0]["url"] if response["images"] else None
+    artists = ", ".join([artist["name"] for artist in response["artists"]])
+    genres = ", ".join(response.get("genres", [])) if response.get("genres") else "N/A"
+    popularity = response.get("popularity", "Not available")
+    
+    # Formatting track list
+    track_list = []
+    track_list_for_dropdown = []
+    for item in response["tracks"]["items"]:
+        track_name = item["name"]
+        track_url = item["external_urls"]["spotify"]
+        track_uri = item["uri"]
+        
+        
+        
+        track_artists = ", ".join(artist["name"] for artist in item["artists"])
+
+        # Format each track entry
+        track_list.append(
+            f"**{track_name}** by `{track_artists}` | [Link]({track_url})\n"
+            f"*URI:* `{track_uri}`"
+        )
+        
+        track_list_for_dropdown.append((track_name, track_uri))
+
+    # Embed list initialization
+    embeds = []
+    max_first_embed_tracks = 4  # First embed track limit
+    max_following_embed_tracks = 6  # Following embed track limit
+
+    # Create the first embed with album information and up to 4 tracks
+    first_embed_tracks = track_list[:max_first_embed_tracks]
+    track_field_value = "\n\n".join(first_embed_tracks)
+
+    # Create the main embed
+    embed = discord.Embed(
+        title=album_name,
+        description=f"Album by [{artists}]({response['artists'][0]['external_urls']['spotify']})",
+        color=discord.Color.purple()
+    )
+
+    embed.add_field(name="Spotify URL", value=album_url, inline=False)
+    embed.add_field(name="Total Tracks", value=f"`{total_tracks}`", inline=True)
+    embed.add_field(name="Release Date", value=f"`{release_date}`", inline=True)
+    embed.add_field(name="Genres", value=f"`{genres}`", inline=True)
+    embed.add_field(name="Popularity", value=f"`{popularity}/100`", inline=True)
+    embed.add_field(name="Tracks List", value=track_field_value, inline=False)
+
+    # Set album cover as the thumbnail
+    if album_image_url:
+        embed.set_thumbnail(url=album_image_url)
+
+    # Footer with requestor's info
+    avatar_url = author.avatar.url if author.avatar else None
+    embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
+
+    # Add the first embed to the list of embeds
+    embeds.append(embed)
+
+    # Additional embeds for remaining tracks (if any), 6 tracks per page
+    remaining_tracks = track_list[max_first_embed_tracks:]
+    page_number = 1
+    if remaining_tracks:
+        page_number += 1
+        for i in range(0, len(remaining_tracks), max_following_embed_tracks):
+            # Create a new embed for each additional page of tracks
+            embed = discord.Embed(
+                title=f"{album_name} (Continued)",
+                description=f"Track List Page {page_number}",
+                color=discord.Color.purple()
+            )
+            if album_image_url:
+                embed.set_thumbnail(url=album_image_url)
+            embed.add_field(name="Tracks List", value="\n\n".join(remaining_tracks[i:i + max_following_embed_tracks]), inline=False)
+            embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
+            
+            embeds.append(embed)
+            page_number += 1
+
+    return embeds, track_list_for_dropdown

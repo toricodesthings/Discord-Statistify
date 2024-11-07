@@ -88,7 +88,7 @@ async def on_message(message):
         else:
             command, params = b_commands.identify_commands(ctx)
 
-            cmd_func = globals().get(command) or getattr(__import__('commands'), command, None)
+            cmd_func = globals().get(command) or getattr(b_commands, command, None)
             if cmd_func and callable(cmd_func):
                 try:
                     # Gather arguments and call the command

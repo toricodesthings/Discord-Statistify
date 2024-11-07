@@ -125,3 +125,33 @@ async def request_playlist_info(playlist_id, token):
                 return data, response.status
             return None, response.status
         
+#API Req #8: Get User Info
+async def request_user_info(user_id, token):
+    global web_endpoint
+    url = f"{web_endpoint}/v1/users/{user_id}"
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }            
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers = headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data, response.status
+            return None, response.status
+        
+#API Req #9: Get User Info
+async def request_album_info(album_id, token):
+    global web_endpoint
+    url = f"{web_endpoint}/v1/albums/{album_id}"
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }            
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers = headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data, response.status
+            return None, response.status
+        
