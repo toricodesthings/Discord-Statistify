@@ -1,6 +1,6 @@
 import discord, json, os, asyncio
-import apiwrapper as spotifyapi
-import response_formatter as embedder
+from wrapper import apiwrapper as spotifyapi
+from botmodules import response_formatter as embedder
 from urllib.parse import urlparse
 from discord.ui import View, Select, Button
 
@@ -166,7 +166,8 @@ def get_reply_method(call_type):
 
 #Loads presaved artists into database for usage in commands
 def load_ps_artist():
-    file_path = os.path.join(os.path.dirname(__file__), 'saved_data', 'savedartists.json')
+    root_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    file_path = os.path.join(root_folder, 'saved_data', 'savedartists.json')
     try:
         with open(file_path, "r") as file:
             return json.load(file)

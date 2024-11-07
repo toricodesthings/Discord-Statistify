@@ -1,5 +1,5 @@
 import discord
-import apiwrapper as spotifyapi
+from wrapper import apiwrapper as spotifyapi
 
 #Misc Command - Change Track Duration from ms to s
 def format_track_duration(ms):

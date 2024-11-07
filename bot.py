@@ -1,7 +1,8 @@
 #Load required libraries
-import discord, json, os, time, inspect, slash_commands
-import commands as b_commands
-import authorizer as auth
+import discord, json, os, time, inspect
+from botmodules import slash_commands
+from botmodules import commands as b_commands
+from wrapper import authorizer as auth
 from datetime import datetime
 from dotenv import load_dotenv
 

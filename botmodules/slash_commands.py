@@ -1,5 +1,5 @@
 import discord
-import commands as b_commands  
+from botmodules import commands as b_commands  
 from discord.ui import Select, View
 
 access_token = ""

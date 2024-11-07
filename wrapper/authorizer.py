@@ -1,5 +1,5 @@
 import os, json, time
-import apiwrapper as spotifyapi
+from wrapper import apiwrapper as spotifyapi
 from datetime import datetime
 
 #TERMINAL COLOR CODE
