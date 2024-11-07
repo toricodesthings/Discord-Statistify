@@ -80,7 +80,8 @@ async def request_album_tracklist(albumid, token):
                 data = await response.json()
                 return data, response.status
             return None, response.status
-        
+
+#API Req #5: Get Track Info
 async def request_track_info(trackid, token):
     global web_endpoint
     url = f"{web_endpoint}/v1/tracks/{trackid}"
@@ -93,7 +94,8 @@ async def request_track_info(trackid, token):
                 data = await response.json()
                 return data, response.status
             return None, response.status
-        
+
+#API Req #6: Get Track Audio Features Info
 async def request_track_audiofeatures(trackid, token):
     global web_endpoint
     url = f"{web_endpoint}/v1/audio-features/{trackid}"
@@ -108,3 +110,18 @@ async def request_track_audiofeatures(trackid, token):
                 return data, response.status
             return None, response.status
     
+#API Req #7: Get Playlist Info
+async def request_playlist_info(playlist_id, token):
+    global web_endpoint
+    url = f"{web_endpoint}/v1/playlists/{playlist_id}"
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }            
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers = headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data, response.status
+            return None, response.status
+        
