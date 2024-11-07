@@ -8,12 +8,11 @@ This is a work-in-progress discord that connects with Spotify's Web API to retri
 + ~~Track data fetch and audio analysis~~
 + ~~Make save command per user based~~
 + ~~Expand get command to playlist~~
-+ Expand get command to user
-+ Expand get command to albums
++ ~~Expand get command to user~~
++ ~~Expand get command to albums~~
 + Add buttons to save in all get commands
 + Search function for categories
 + Expand save command to tracks, artists, and playlists
-+ Optimize and Clean up this spaghetti of a code :(
 
 # Lib Links 
 * https://pypi.org/project/aiohttp/
@@ -21,4 +20,4 @@ This is a work-in-progress discord that connects with Spotify's Web API to retri
 * https://pypi.org/project/python-dotenv/
 
 # Note
-Bot is Still a WIP but Basic Functions have been built
+Bot is has majority of functions build but still WIP.
