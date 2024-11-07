@@ -9,45 +9,59 @@ async def setup_slash_commands(token, bot):
     global access_token
     access_token = token
 
+    # Use unique function names for each command
     @tree.command(name="ping", description="Pings Statisfy")
-    async def slash_command(interaction: discord.Interaction):    
+    async def ping_command(interaction: discord.Interaction):    
         author = interaction.user
         await b_commands.ping(interaction, bot)
 
     @tree.command(name="help", description="Access the Help Menu")
-    async def slash_command(interaction: discord.Interaction):    
+    async def help_command(interaction: discord.Interaction):    
         author = interaction.user
         await b_commands.help(interaction, author)
 
     @tree.command(name="list_artist", description="List Saved Artist")
-    async def slash_command(interaction: discord.Interaction):    
+    async def list_artist_command(interaction: discord.Interaction):    
         author = interaction.user
         await b_commands.list(interaction, author, "artists")
         
     @tree.command(name="get_artist_byid", description="Search and Retrieve Artist by URI code")
     @discord.app_commands.describe(id="Enter the Artist URI, URL, or Artist ID:")
-    async def slash_command(interaction: discord.Interaction, id: str):    
+    async def get_artist_byid_command(interaction: discord.Interaction, id: str):    
         author = interaction.user
         await b_commands.get(interaction, author, bot, "artists", id, access_token)
         
     @tree.command(name="get_artist_saved", description="Retrieve info of Saved Artists")
-    async def slash_command(interaction: discord.Interaction, id: str):    
+    async def get_artist_saved_command(interaction: discord.Interaction):
         author = interaction.user
         await b_commands.get(interaction, author, bot, "artists", "saved", access_token)
     
     @tree.command(name="get_track_byid", description="Search and Retrieve Track by URI code")
     @discord.app_commands.describe(id="Enter the Track URI, URL, or ID:")
-    async def slash_command(interaction: discord.Interaction, id: str):    
+    async def get_track_byid_command(interaction: discord.Interaction, id: str):    
         author = interaction.user
         await b_commands.get(interaction, author, bot, "tracks", id, access_token)
         
+    @tree.command(name="get_playlist_byid", description="Search and Retrieve Public Playlist by URI code")
+    @discord.app_commands.describe(id="Enter the Playlist URI, URL, or ID:")
+    async def get_playlist_byid_command(interaction: discord.Interaction, id: str):    
+        author = interaction.user
+        await b_commands.get(interaction, author, bot, "playlists", id, access_token)
+        
     @tree.command(name="save_artist_byid", description="Save Artist by URI code")
     @discord.app_commands.describe(id="Enter the Artist URI, URL, or ID:")
-    async def slash_command(interaction: discord.Interaction, id: str):    
+    async def save_artist_byid_command(interaction: discord.Interaction, id: str):    
         author = interaction.user
         await b_commands.save(interaction, author, "artists", id, access_token)
         
-
-        
-    synced = await tree.sync()  # Sync commands with Discord
+    @tree.command(name='sync_slashcommands', description='Owner only')
+    async def sync(interaction: discord.Interaction):
+        if interaction.user.guild_permissions.administrator:
+            await tree.sync()
+            await interaction.response.send_message("Command Tree has been Synced.")
+        else:
+            await interaction.response.send_message('You must be the owner to use this command!')
+            
+    # Sync commands with Discord
+    synced = await tree.sync()
     return synced
