@@ -24,9 +24,9 @@ async def on_ready():
     print(f"{GREEN}{bot.user.name} has connected to Discord Successfully!{RESET}")
     presaved_artist = b_commands.load_ps_artist()
     if len(presaved_artist) > 0:
-        print(f"{LIGHT_BLUE}Loaded {len(presaved_artist)} saved artists{RESET}")
+        print(f"{LIGHT_BLUE}Loaded presaved artists for {len(presaved_artist)} users{RESET}")
     else:
-        print(f"{RED}No presaved elements loaded, this might be an error{RESET}")
+        print(f"{RED}No presaved elements loaded, this might mean an error has occured.{RESET}")
     
     # Start Token Request
     token, response_code, response_msg = await auth.request_token(spotify_cid, spotify_csecret)

@@ -122,7 +122,7 @@ def get_reply_method(call_type):
 
 #Loads presaved artist into databse for usage in commands
 def load_ps_artist():
-    file_path = os.path.join(os.path.dirname(__file__), 'savedartists.json')
+    file_path = os.path.join(os.path.dirname(__file__), 'saved_data', 'savedartists.json')
     try:
         with open(file_path, "r") as file:
             return json.load(file)
@@ -218,6 +218,18 @@ def extract_track_id(u_input):
         return urlparse(u_input).path.split("/")[2]
 
     raise ValueError("The track parameter must be a valid Spotify Track URI, URL, or ID")
+
+def extra_playlist_id(u_input):
+    if len(u_input) == 22 and u_input.isalnum():
+        return u_input
+    if "spotify:playlist:" in u_input:
+        # Extract ID from URI
+        return u_input.split(":")[-1]
+    if "open.spotify.com" in u_input:
+        # Extract ID from URL
+        return urlparse(u_input).path.split("/")[2]
+
+    raise ValueError("The track parameter must be a valid Spotify Playlist URI, URL, or ID")
 
 # Retrieve a List of Presaved Artist Function
 def retrieve_artists():
@@ -354,8 +366,6 @@ def format_get_track(author, response, audiofeatures_response):
     duration = format_track_duration(response['duration_ms'])
     popularity = response.get('popularity', 'N/A')
 
-    allembeds = []
-
     # Embed creation with album and track details
     embed = discord.Embed(
         title=f"{track_name}",  
@@ -376,13 +386,59 @@ def format_get_track(author, response, audiofeatures_response):
     embed.add_field(name="Spotify Track URI", value=f"`{track_uri}`", inline=False)
     embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
     
-    allembeds.append(embed)
+    allembeds = [embed]
 
     # Adding audio features
     allembeds = format_track_audiofeatures(author, response, audiofeatures_response, allembeds)
     
     return allembeds
+
+def format_get_playlist(author, response):
+
+    playlist_name = response['name']
+    playlist_image_url = response['images'][0]['url'] if response['images'] else None
+    follower_count = response['followers']['total']
+    is_collaborative = "Yes" if response['collaborative'] else "No"
+    owner_name = response['owner']['display_name']
+    owner_url = response['owner']['external_urls']['spotify']
+    playlist_url = response['external_urls']['spotify']
+    
+    # Formatting tracks
+    track_list = []
+    for item in response['tracks']['items']:
+        track_info = item['track']
+        track_name = track_info['name']
+        artists = ", ".join(artist['name'] for artist in track_info['artists'])
+        track_list.append(f"**{track_name}** - `{artists}`\n")
+
+    # Limiting track list display if too long
+    max_tracks_display = 12  # Set max number of tracks to display in embed
+    displayed_tracks = track_list[:max_tracks_display]
+    track_field_value = "\n".join(displayed_tracks)
+    
+    if len(track_list) > max_tracks_display:
+        track_field_value += f"\n...and {len(track_list) - max_tracks_display} more tracks"
         
+    embed = discord.Embed(
+        title=playlist_name,
+        description=f"Playlist by [{owner_name}]({owner_url})",
+        color=discord.Color.orange()
+    )
+
+    if playlist_image_url:
+        embed.set_thumbnail(url=playlist_image_url)
+        
+    embed.add_field(name="Spotify URL", value=playlist_url, inline=False)
+    embed.add_field(name="Followers", value=f"`{follower_count}`", inline=True)
+    embed.add_field(name="Collaborative", value=f"`{is_collaborative}`", inline=True)
+
+    embed.add_field(name="Tracks", value=track_field_value, inline=False)
+
+    avatar_url = author.avatar.url
+    embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
+
+    return [embed]
+    
         
 # ------------------- BOT ASYNC FUNCTIONS ----------------------------
 
@@ -455,7 +511,6 @@ async def format_track_embed(author, response, token):
     return embeds
 
 async def fetch_artists(call_type, artist_uri, author, token, reply_type, is_slash_withsaved):
-
     # Fetch artist information and top tracks
     data, response_code_a = await spotifyapi.request_artist_info(artist_uri, token)
     track_data, response_code_t = await spotifyapi.request_artist_toptracks(artist_uri, token)
@@ -480,24 +535,26 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_type, is_sla
             else:
                 msg = await reply_type(embed=allembeds[0])
 
-
+    
         await generate_artists_get_buttons(call_type, allembeds, reply_type, msg)
-        
         return  
+    
+    else:
+        print("wait what")
+        print(data, response_code_a)
+        if response_code_a == 400 and response_code_t == 400:
+            bot_msg = "Invalid artist URI." 
+        elif response_code_a == 404:
+            bot_msg = "Cannot find artist, check if you used an artist id"
+        else:
+            bot_msg = f"API Requests failed with status codes: {response_code_a} & {response_code_t}"
+            
+        if is_slash_withsaved:
+            await call_type.edit_original_response(content = "Fetching...", view = None)
+            await call_type.followup.send(content = bot_msg, ephemeral = False)
 
-    # Error Handling 
-    if response_code_a == 400 and response_code_t == 400:
-        bot_msg = "Invalid artist URI." 
-    elif response_code_a == 404:
-        bot_msg = "Cannot find artist, check if you used an artist id"
-    else:
-        bot_msg = f"API Requests failed with status codes: {response_code_a} & {response_code_t}"
-        
-    if is_slash_withsaved:
-        await call_type.edit_original_response(content = "Fetching...", view = None)
-        await call_type.followup.send(content = bot_msg, ephemeral = False)
-    else:
-        await reply_type(bot_msg)
+        else:
+            await reply_type(bot_msg)
         
 async def fetch_track(call_type, track_uri, author, token, reply_type):
     data, response_code_t = await spotifyapi.request_track_info(track_uri, token)
@@ -523,6 +580,31 @@ async def fetch_track(call_type, track_uri, author, token, reply_type):
         bot_msg = "Cannot find track, check if you used a track id"    
     else:
         bot_msg = f"API Requests failed with status codes: {response_code_t} & {response_code_taf}"
+    await reply_type(bot_msg)
+    
+async def fetch_playlist(call_type, playlist_uri, author, token, reply_type):
+
+    data, response_code = await spotifyapi.request_playlist_info(playlist_uri, token)
+    
+    if data and response_code == 200:
+        allembeds = format_get_playlist(author, data)
+        if isinstance(call_type, discord.Interaction):
+            await reply_type(embed = allembeds[0], ephemeral=False)
+            msg = await call_type.original_response()
+        else:
+            msg = await reply_type(embed=allembeds[0])
+            
+        #await generate_tracks_get_buttons(call_type, allembeds, reply_type, msg)
+
+        return
+        
+    # Error Handling 
+    if response_code == 400:
+        bot_msg = "Invalid artist URI." 
+    elif response_code == 404:
+        bot_msg = "Cannot find playlist, check if you used a playlist id"    
+    else:
+        bot_msg = f"API Requests failed with status codes: {response_code}"
     await reply_type(bot_msg)
 
 async def wait_for_user_input(call_type, author, bot):
@@ -600,11 +682,14 @@ async def get_saved_module(call_type, reply_type, author, bot, token):
         if fail:
             await reply_type(fail)
             return
+        return artisturi
+    
     
     elif isinstance(call_type, discord.Interaction):
         saved_artists_list = retrieve_artists()
         await generate_artist_dropdown(author, call_type, saved_artists_list, token, reply_type)
-    return artisturi
+
+    
 
 # Get Artist Info        
 async def get(call_type, author, bot, searchtarget, u_input, token, *args):
@@ -617,7 +702,8 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
             
             if artisturi == "use_saved":
                 artisturi = await get_saved_module(call_type, reply_type, author, bot, token)
-                
+                return
+            
         except ValueError as value_error:
             await reply_type(value_error)
             return
@@ -635,7 +721,16 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
         
         await fetch_track(call_type, trackuri, author, token, reply_type)
         return
+    
+    elif searchtarget.lower() == "playlists":
+        try:
+            playlisturi = extra_playlist_id(u_input)
+        except ValueError as value_error:
+            await reply_type(value_error)
+            return
         
+        await fetch_playlist(call_type, playlisturi, author, token, reply_type)
+        return
     
     else:
         await reply_type(f"The parameter of the get command `{searchtarget}` is invalid.")
