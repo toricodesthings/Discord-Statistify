@@ -66,13 +66,37 @@ async def setup_slash_commands(token, bot):
         author = interaction.user
         await b_commands.save(interaction, author, "artists", id, access_token)
         
+    @tree.command(name="save_album_byid", description="Save Album by URI code")
+    @discord.app_commands.describe(id="Enter the Artist URI, URL, or ID:")
+    async def save_album_byid_command(interaction: discord.Interaction, id: str):    
+        author = interaction.user
+        await b_commands.save(interaction, author, "albums", id, access_token)
+        
+    @tree.command(name="save_track_byid", description="Save Track by URI code")
+    @discord.app_commands.describe(id="Enter the Artist URI, URL, or ID:")
+    async def save_track_byid_command(interaction: discord.Interaction, id: str):    
+        author = interaction.user
+        await b_commands.save(interaction, author, "tracks", id, access_token)
+        
+    @tree.command(name="save_playlist_byid", description="Save Playlist by URI code")
+    @discord.app_commands.describe(id="Enter the Artist URI, URL, or ID:")
+    async def save_playlist_byid_command(interaction: discord.Interaction, id: str):    
+        author = interaction.user
+        await b_commands.save(interaction, author, "playlists", id, access_token)
+        
     @tree.command(name='sync_slashcommands', description='Owner only')
     async def sync(interaction: discord.Interaction):
         if interaction.user.guild_permissions.administrator:
+            # Acknowledge the interaction immediately
+            await interaction.response.defer()
+
+            # Perform the sync operation
             await tree.sync()
-            await interaction.response.send_message("Command Tree has been Synced.")
+
+            # Send follow-up message after sync is complete
+            await interaction.followup.send("Command Tree has been Synced.")
         else:
-            await interaction.response.send_message('You must be the owner to use this command!')
+            await interaction.response.send_message('You must be the owner to use this command!', ephemeral=True)
             
     # Sync commands with Discord
     synced = await tree.sync()

@@ -274,17 +274,17 @@ def get_reply_method(call_type):
 #Loads presaved data from JSON
 def load_ps_data(data_type):
     root_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    file_path = os.path.join(root_folder, 'saved_data', f'saved{data_type}.json')
+    file_path = os.path.join(root_folder, 'saved_data', f'saved{data_type}s.json')
     
     try:
         with open(file_path, "r") as file:
             return json.load(file)
     except FileNotFoundError:
         print(f"saved{data_type}.json not found, make sure it's not deleted.")
-        return []
+        return {}
     except json.JSONDecodeError:
         print(f"Error decoding saved{data_type}.json. Check if the file is correctly formatted.")
-        return []
+        return {}
 
 
 #Add new artists to database (user based)
@@ -340,11 +340,15 @@ def append_saved(author, data_uri, data_name, data_type):
     """
     author_id = str(author.id)
     presaved_data = load_ps_data(data_type)
+ 
     
-    # Check if the item is already saved
-    if any(item["url"] == data_uri for item in presaved_data.get(author_id, [])):
+    # Construct the dynamic key based on data_type
+    url_key = f"{data_type}_url"
+
+    # Check if any item in presaved_data has the same URI
+    if any(item.get(url_key) == data_uri for item in presaved_data.get(author_id, [])):
         return f"You have already saved the {data_type} `{data_name}`"
-    
+
 
     def sanitize_json_string(value):
         if isinstance(value, str):
@@ -354,13 +358,13 @@ def append_saved(author, data_uri, data_name, data_type):
     # Only apply `sanitize_json_string` to `data_name`
     presaved_data.setdefault(author_id, []).append({
         f"{data_type}": sanitize_json_string(data_name),
-        f"{data_type}_url": data_uri  # No sanitization needed here
+        f"{data_type}_url": data_uri 
     })
 
     
     # Attempt to save changes
     try:
-        modify_ps_data(data_type, presaved_data)
+        modify_ps_data(presaved_data, data_type)
         return f"Successfully saved {data_type} `{data_name}`"
     except Exception as e:
         return f"Save command encountered an exception: {str(e)}"
@@ -622,7 +626,7 @@ Example: `s!save artists` [Spotify URL, URI or Direct ID]
 
 # List Saved Artists
 async def list(call_type, author, listtarget, *args):
-    data_type = listtarget.lower()
+    data_type = listtarget.lower().rstrip("s")
     reply_func = get_reply_method(call_type)
     
     saved_list = fetch_saved_list(data_type)
@@ -730,22 +734,34 @@ async def get_saved_module(call_type, reply_func, author, bot, token, data_type)
 # Temporary Save Artist (Will Update Later)
 async def save(call_type, author, savetarget, u_input, token, *args):
     reply_func = get_reply_method(call_type)
-    
-    if savetarget.lower() == 'artists':
+    data_type = savetarget.lower()
+
+    # Map each data type to its respective functions and error messages
+    data_mappings = {
+        "artists": ("Artist", spotifyapi.request_artist_info),
+        "tracks": ("Track", spotifyapi.request_track_info),
+        "playlists": ("Playlist", spotifyapi.request_playlist_info),
+        "albums": ("Album", spotifyapi.request_album_info),
+    }
+
+    if data_type in data_mappings:
+        uri_type, api_request_function = data_mappings[data_type]
+        
         try:
-            artisturi = extract_id(u_input, "Artist")
+            # Attempt to extract the URI
+            data_uri = extract_id(u_input, uri_type)
             
-            # API Request to Fetch Artist Data
-            data, response_code = await spotifyapi.request_artist_info(artisturi, token)
+            # API Request to Fetch Data
+            data, response_code = await api_request_function(data_uri, token)
             
             if data and response_code == 200:
-                artistname = data.get('name', 'Unknown Artist')
-                # Save artist info
-                statusmsg = append_saved(author, artisturi, artistname, "artist")
+                data_name = data.get('name', f"Unknown {uri_type}")
+                # Save data info
+                statusmsg = append_saved(author, data_uri, data_name, uri_type.lower())
             else:
                 # Handle invalid or failed API responses
                 statusmsg = (
-                    "The artist URI code you entered is invalid."
+                    f"The {data_type} URI code you entered is invalid."
                     if response_code == 400
                     else f"Cannot save due to API request failure. Status code: {response_code}"
                 )
@@ -756,4 +772,6 @@ async def save(call_type, author, savetarget, u_input, token, *args):
             await reply_func(value_error)
             
         return
+
     await reply_func(f"The parameter of the save command `{savetarget}` is invalid.")
+
