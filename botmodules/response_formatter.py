@@ -8,15 +8,20 @@ def format_track_duration(ms):
     return f"{minutes}:{seconds:02}"
 
 
-def format_list_artist(author, saved_artists_list):
+def format_list(author, list_data_type, saved_list):
     embed = discord.Embed(
-        title="Saved Artists",
-        description=f"List of {author.display_name}'s presaved artists (use help find out how to save artists)",
+        title=f"Saved {list_data_type}s",
+        description=f"List of {author.display_name}'s presaved {list_data_type} (use help find out how to save {list_data_type})",
         color=discord.Color.green(),
     )
     avatar_url = author.avatar.url
-    for index, a in enumerate(saved_artists_list):
-        embed.add_field(name=f"`{index+1}` - {a["artist"]}", value=f"Artist ID: `{a["artist_url"]}`", inline=False)
+    for index, a in enumerate(saved_list):
+        embed.add_field(
+            name=f"`{index+1}` - {a[list_data_type]}",
+            value=f"{list_data_type.capitalize()} ID: `{a[f'{list_data_type}_url']}`",
+            inline=False
+        )
+
     embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
 
     return embed

@@ -7,6 +7,8 @@ from discord.ui import View, Select, Button
 
 # -------------------DISCORD UI Generation----------------------------
 
+
+#Custom View Class for Dropdown
 class CustomView(View):
     def __init__(self, *items):
         super().__init__(*items)
@@ -15,24 +17,53 @@ class CustomView(View):
     def set_message(self, msg):
         self.msg = msg
 
-#Generate Dropdown when Calling
-async def generate_artist_dropdown(author, call_type, saved_artists, token, reply_func):
+
+#Saved Retrieval
+#Generate Dropdown for Saved Pathway
+async def generate_dropdown(author, call_type, saved_data, token, reply_func, data_type):
+    """
+    Generates a dropdown menu for selecting a saved item (artist, track, playlist, etc.).
+    
+    Parameters:
+        author (object): The author object (used in callbacks).
+        call_type (str): The type of call or interaction.
+        saved_data (list): The list of saved items to display.
+        token (str): Authorization token.
+        reply_func (func): Function to send messages.
+        data_type (str): The type of data (e.g., 'artist', 'track', 'playlist').
+    """
+    # Map data type to display label and value key
+    label_key = "name"  # Generalized key for the item's name
+    url_key = "url"     # Generalized key for the item's URI/URL
+    
     selections = Select(
-        placeholder="Select an artist...",
+        placeholder=f"Select a {data_type}...",
         min_values=1,
         max_values=1,
         options=[
-            discord.SelectOption(label=artist["artist"], value=artist["artist_url"])
-            for artist in saved_artists
+            discord.SelectOption(label=item[label_key], value=item[url_key])
+            for item in saved_data
         ]
     )
     
     async def select_callback(interaction: discord.Interaction):
-        artisturi = selections.values[0]
+        selected_uri = selections.values[0]
         selections.disabled = True
         view = View()
         view.add_item(selections)
-        await fetch_artists(call_type, artisturi, author, token, reply_func, True)
+        
+        # Fetch function mapping based on data type
+        fetch_function_mapping = {
+            "artist": fetch_artists,
+            "track": fetch_track,
+            "playlist": fetch_playlist,
+            "album": fetch_albums
+        }
+        
+        fetch_function = fetch_function_mapping.get(data_type)
+        
+        if fetch_function:
+            await fetch_function(call_type, selected_uri, author, token, reply_func, data_type == "artist")
         
     selections.callback = select_callback
     view = View()
@@ -40,13 +71,13 @@ async def generate_artist_dropdown(author, call_type, saved_artists, token, repl
 
     # Send the dropdown menu to the user
     await reply_func(
-        "Please specify which saved artist you want to retrieve:",
+        f"Please specify which saved {data_type} you want to retrieve:",
         view=view,
         ephemeral=True
     )
 
-
-#-----------------------------------------------------------------------------------------------
+#Track Retrievals
+#Track Selection Dropdown for Artist, Playlist and Album modules
 async def generate_track_selection(author, call_type, track_items, token, reply_func):
     # Create a dropdown menu with track options
     selections = Select(
@@ -80,8 +111,8 @@ async def generate_track_selection(author, call_type, track_items, token, reply_
     )
 #0-----------------------------------------------------------------------------------------------------------------------
 
-#Generate Previous and Next Buttons for Get Command - Artists Module
-async def generate_artists_get_buttons(author, call_type, allembeds, track_items, reply_func, token):
+#Generate Previous, Next, and Get Info Buttons for Get Command - Artists
+async def generate_artists_get_button(author, call_type, allembeds, track_items, reply_func, token):
     
     if not len(allembeds) > 1:
         return
@@ -133,6 +164,54 @@ async def generate_artists_get_buttons(author, call_type, allembeds, track_items
             
     return view
     
+#Generate Previous, Next, and Get Track Info Buttons for Get Function
+async def generate_getmodules_buttons(author, call_type, allembeds, track_items, reply_func, token):
+    
+    view = CustomView()
+        
+    async def track_info_click(call_type):
+        await generate_track_selection(author, call_type, track_items, token, reply_func)
+        await call_type.response.defer()
+        
+    get_track_info_button = Button(label="Get Track Info", style=discord.ButtonStyle.secondary)
+    get_track_info_button.callback = track_info_click
+
+    if len(allembeds) > 1:
+        state = {"current_page": 0}
+        async def prev_click(call_type):
+            if state["current_page"] > 0:
+                state["current_page"] -= 1
+                await update_embed(call_type)
+
+        async def next_click(call_type):
+            if state["current_page"] < len(allembeds) - 1:
+                state["current_page"] += 1
+                await update_embed(call_type)
+                
+        async def update_embed(call_type):
+            prev_button.disabled = state["current_page"] == 0
+            next_button.disabled = state["current_page"] == len(allembeds) - 1
+            
+            page = int(state["current_page"])
+            await view.msg.edit(embed=allembeds[page], view=view)
+            await call_type.response.defer()
+
+        prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
+        next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
+    
+        prev_button.disabled = True
+    
+        prev_button.callback = prev_click
+        next_button.callback = next_click
+        view.add_item(prev_button)
+        view.add_item(get_track_info_button)
+        view.add_item(next_button)
+    else:
+        
+        view.add_item(get_track_info_button)
+
+    return view
+    
 #Generate Previous and Next Buttons for Get Command - Tracks Module
 async def generate_tracks_get_buttons(call_type, allembeds, reply_func):
     
@@ -172,103 +251,7 @@ async def generate_tracks_get_buttons(call_type, allembeds, reply_func):
 
     return view
 
-#Generate Previous and Next Buttons for Get Command - Tracks Module
-async def generate_playlists_get_buttons(author, call_type, allembeds, track_items, reply_func, token):
-    
-    view = CustomView()
-        
-    async def track_info_click(call_type):
-        await generate_track_selection(author, call_type, track_items, token, reply_func)
-        await call_type.response.defer()
-        
-    get_track_info_button = Button(label="Get Track Info", style=discord.ButtonStyle.secondary)
-    get_track_info_button.callback = track_info_click
 
-    if len(allembeds) > 1:
-        state = {"current_page": 0}
-        async def prev_click(call_type):
-            if state["current_page"] > 0:
-                state["current_page"] -= 1
-                await update_embed(call_type)
-
-        async def next_click(call_type):
-            if state["current_page"] < len(allembeds) - 1:
-                state["current_page"] += 1
-                await update_embed(call_type)
-                
-        async def update_embed(call_type):
-            prev_button.disabled = state["current_page"] == 0
-            next_button.disabled = state["current_page"] == len(allembeds) - 1
-            
-            page = int(state["current_page"])
-            await view.msg.edit(embed=allembeds[page], view=view)
-            await call_type.response.defer()
-
-        prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
-        next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
-    
-        prev_button.disabled = True
-    
-        prev_button.callback = prev_click
-        next_button.callback = next_click
-        view.add_item(prev_button)
-        view.add_item(get_track_info_button)
-        view.add_item(next_button)
-    else:
-        
-        view.add_item(get_track_info_button)
-
-    return view
-    
-#Generate Previous and Next Buttons for Get Command - Tracks Module
-async def generate_albums_get_buttons(author, call_type, allembeds, track_items, reply_func, token):
-    
-    view = CustomView()
-        
-    async def track_info_click(call_type):
-        await generate_track_selection(author, call_type, track_items, token, reply_func)
-        await call_type.response.defer()
-        
-    get_track_info_button = Button(label="Get Track Info", style=discord.ButtonStyle.secondary)
-    get_track_info_button.callback = track_info_click
-
-    if len(allembeds) > 1:
-        state = {"current_page": 0}
-        async def prev_click(call_type):
-            if state["current_page"] > 0:
-                state["current_page"] -= 1
-                await update_embed(call_type)
-
-        async def next_click(call_type):
-            if state["current_page"] < len(allembeds) - 1:
-                state["current_page"] += 1
-                await update_embed(call_type)
-                
-        async def update_embed(call_type):
-            prev_button.disabled = state["current_page"] == 0
-            next_button.disabled = state["current_page"] == len(allembeds) - 1
-            
-            page = int(state["current_page"])
-            await view.msg.edit(embed=allembeds[page], view=view)
-            await call_type.response.defer()
-
-        prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
-        next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
-    
-        prev_button.disabled = True
-    
-        prev_button.callback = prev_click
-        next_button.callback = next_click
-        view.add_item(prev_button)
-        view.add_item(get_track_info_button)
-        view.add_item(next_button)
-    else:
-        
-        view.add_item(get_track_info_button)
-
-    return view
-    
-        
 # ------------------- Non ASYNC FUNCTIONS ----------------------------
 
 #Convert Message to Functions
@@ -288,167 +271,146 @@ def get_reply_method(call_type):
     else:
         return call_type.response.send_message
 
-#Loads presaved artists into database for usage in commands
-def load_ps_artist():
+#Loads presaved data from JSON
+def load_ps_data(data_type):
     root_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    file_path = os.path.join(root_folder, 'saved_data', 'savedartists.json')
+    file_path = os.path.join(root_folder, 'saved_data', f'saved{data_type}.json')
+    
     try:
         with open(file_path, "r") as file:
             return json.load(file)
     except FileNotFoundError:
-        print("savedartists.json not found, make sure it's not deleted.")
+        print(f"saved{data_type}.json not found, make sure it's not deleted.")
+        return []
     except json.JSONDecodeError:
+        print(f"Error decoding saved{data_type}.json. Check if the file is correctly formatted.")
         return []
 
-#Loads presaved tracks into database for usage in commands
-def load_ps_track():
-    file_path = os.path.join(os.path.dirname(__file__), 'saved_data', 'savedtracks.json')
-    try:
-        with open(file_path, "r") as file:
-            return json.load(file)
-    except FileNotFoundError:
-        print("savedtracks.json not found, make sure it's not deleted.")
-    except json.JSONDecodeError:
-        return []
-
-#Loads presaved playlists into database for usage in commands
-def load_ps_playlist():
-    file_path = os.path.join(os.path.dirname(__file__), 'saved_data', 'savedplaylists.json')
-    try:
-        with open(file_path, "r") as file:
-            return json.load(file)
-    except FileNotFoundError:
-        print("savedplaylists.json not found, make sure it's not deleted.")
-    except json.JSONDecodeError:
-        return []
 
 #Add new artists to database (user based)
-def modify_ps_artist(new_artist):    
-    file_path = os.path.join(os.path.dirname(__file__), 'savedartists.json')
+def modify_ps_data(new_data, data_type):    
+    root_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    file_path = os.path.join(root_folder, 'saved_data', f'saved{data_type}s.json')
+    
     try:
         with open(file_path, "w") as file:
-            json.dump(new_artist, file, indent=4)
-    except FileNotFoundError:
-        print("savedartists.json not found, make sure it's not deleted.")
-        return []
-    except json.JSONDecodeError:
-        return []
-
-#Retrieve Saved Values from Database (TO BE CHANGED TO SUPPORT ALL THREE)
-def retrieve_saved(author, interaction_msg):
+            json.dump(new_data, file, indent=4)
+        return new_data  # Return the saved data if successful
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error saving {data_type}: {e}")
+        return []  # Return an empty list if any error
+    
+    
+#Retrieve Saved Values from Database based on Selection (TO BE CHANGED TO SUPPORT ALL THREE)
+def retrieve_saved_on_select(author, data_type, interaction_msg):
+    author_id = str(author.id)
+    
     try:
         user_index = int(interaction_msg)
-        author = str(author.id)
-        user_saved_artists = []
-        presaved_artists = load_ps_artist()
-        for author, artists in presaved_artists.items():
-            user_saved_artists.extend(artists)
+        presaved_data = load_ps_data(data_type)
+        user_saved_data = presaved_data.get(author_id, [])
         
-        if 1 <= user_index <= len(user_saved_artists):
-            selected_artist_uri = user_saved_artists[user_index - 1]['artist_url']
-            return selected_artist_uri, None
-
+        # Check if the user index is within range
+        if 1 <= user_index <= len(user_saved_data):
+            # Dynamically access the appropriate URL key based on data_type
+            selected_item_uri = user_saved_data[user_index - 1][f"{data_type.rstrip("s")}_url"]
+            return selected_item_uri, None
+        
         else:
-            fail = "Invalid input. Please enter a valid number from the list."
-            return None, fail
+            return None, "Invalid input. Please enter a valid number from the list."
             
     except ValueError:
-        fail = "Invalid input. Please enter a number."
-        return None, fail
+        return None, "Invalid input. Please enter a number."
 
+    
+    
 # Add data to existing list for speific user 
-def append_saved(author, artist_uri, artist_name):
-    author = str(author.id)
-    presaved_artists = load_ps_artist()
+def append_saved(author, data_uri, data_name, data_type):
+    """
+    Appends new saved data (artist, track, playlist, etc.) for the given author.
     
-    for artist in presaved_artists.get(author, []):
-        if artist["artist_url"] == artist_uri:
-            status = f"You have already saved the artist `{artist_name}`"
-            return status
+    Parameters:
+        author (object): The author object with an id attribute.
+        data_uri (str): The URI of the data to be saved.
+        data_name (str): The name of the data to be saved.
+        data_type (str): The type of data (e.g., 'artist', 'track', 'playlist').
+        
+    Returns:
+        str: Success or error message.
+    """
+    author_id = str(author.id)
+    presaved_data = load_ps_data(data_type)
     
-    new_artist = {
-        "artist": artist_name,
-        "artist_url": artist_uri
-    } 
-    if author in presaved_artists:
-        presaved_artists[author].append(new_artist)
-    else:
-        presaved_artists[author] = [new_artist]
+    # Check if the item is already saved
+    if any(item["url"] == data_uri for item in presaved_data.get(author_id, [])):
+        return f"You have already saved the {data_type} `{data_name}`"
+    
+
+    def sanitize_json_string(value):
+        if isinstance(value, str):
+            return json.dumps(value)[1:-1]  # Removes extra quotes added by json.dumps
+        return value
+
+    # Only apply `sanitize_json_string` to `data_name`
+    presaved_data.setdefault(author_id, []).append({
+        f"{data_type}": sanitize_json_string(data_name),
+        f"{data_type}_url": data_uri  # No sanitization needed here
+    })
+
+    
+    # Attempt to save changes
     try:
-        modify_ps_artist(presaved_artists)
-        status = f"Succesfully saved artist `{artist_name}`"
+        modify_ps_data(data_type, presaved_data)
+        return f"Successfully saved {data_type} `{data_name}`"
     except Exception as e:
-        status = f"Save command encountered an exception: {str(e)}"
-    return status
+        return f"Save command encountered an exception: {str(e)}"
+
 
 #Extract ID
+    
+def extract_id(u_input, input_type):
+    valid_lengths = {"Artist": 22, "Track": 22, "Album": 22, "Playlist": 22, "User": 28}
+    
+    # Check for standard Spotify ID based on type length
+    if len(u_input) == valid_lengths[input_type] and u_input.isalnum():
+        return u_input
+    
+    # Check for URI format
+    if f"spotify:{input_type.lower()}:" in u_input:
+        return u_input.split(":")[-1]
+    
+    # Check for URL format
+    if "open.spotify.com" in u_input:
+        try:
+            return urlparse(u_input).path.split("/")[2]
+        except IndexError:
+            raise ValueError(f"Invalid Spotify {input_type} URL format")
+    
+    # Check for saved keyword (applicable to some types)
+    if u_input == "saved" and input_type in {"Artist", "Track", "Album", "Playlist"}:
+        return "use_saved"
+    
+    raise ValueError(f"The {input_type} parameter must be a valid Spotify {input_type} URI, URL, or ID")
+        
+#Fetch an easily readable and formattable list based on data_type
+def fetch_saved_list(data_type):
+    """
+    Retrieves saved data for the specified data type.
+    
+    Parameters:
+        data_type (str): The type of data to retrieve (e.g., 'artist', 'track', 'playlist').
+        
+    Returns:
+        list: A list of saved items for the given data type.
+    """
+    presaved_data = load_ps_data(data_type)
+    user_saved_data = []
+    
+    for _, items in presaved_data.items():
+        user_saved_data.extend(items)
+    
+    return user_saved_data
 
-def extract_id(u_input, type):
-    
-    if type == "Artist":
-        if len(u_input) == 22 and u_input.isalnum():
-            return u_input
-        elif "spotify:" in u_input and (type.lower() + ":") in u_input:
-            return u_input.split(":")[-1]
-        elif "open.spotify.com" in u_input:
-            return urlparse(u_input).path.split("/")[2]
-        elif u_input == "saved":
-            return "use_saved"
-        
-    elif type == "Track":
-        if len(u_input) == 22 and u_input.isalnum():
-            return u_input
-        elif "spotify:" in u_input and (type.lower() + ":") in u_input:
-            return u_input.split(":")[-1]
-        elif "open.spotify.com" in u_input:
-            # Extract ID from URL
-            return urlparse(u_input).path.split("/")[2]
-        elif u_input == "saved":
-            return "use_saved"
-        
-    elif type == "Album":
-        if len(u_input) == 22 and u_input.isalnum():
-            return u_input
-        elif "spotify:" in u_input and (type.lower() + ":") in u_input:
-            return u_input.split(":")[-1]
-        elif "open.spotify.com" in u_input:
-            # Extract ID from URL
-            return urlparse(u_input).path.split("/")[2]
-        elif u_input == "saved":
-            return "use_saved"
-        
-    elif type == "Playlist":
-        if len(u_input) == 22 and u_input.isalnum():
-            return u_input
-        elif "spotify:" in u_input and (type.lower() + ":") in u_input:
-            # Extract ID from URI
-            return u_input.split(":")[-1]
-        elif "open.spotify.com" in u_input:
-            # Extract ID from URL
-            return urlparse(u_input).path.split("/")[2]
-        elif u_input == "saved":
-            return "use_saved"
-        
-    elif type == "User":
-        if len(u_input) == 28 and u_input.isalnum():
-            return u_input
-        elif "spotify:" in u_input and (type.lower() + ":") in u_input:
-            # Extract ID from URI
-            return u_input.split(":")[-1]
-        elif "open.spotify.com" in u_input:
-            # Extract ID from URL
-            return urlparse(u_input).path.split("/")[2]
-        
-    raise ValueError(f"The {type} parameter must be a valid Spotify {type} URI, URL, or ID")
-        
-# Retrieve a List of Presaved Artist Function
-def retrieve_artists():
-    presaved_artists = load_ps_artist()
-    user_saved_artists = []
-    for _, artists in presaved_artists.items():
-        user_saved_artists.extend(artists)
-    
-    return user_saved_artists
         
 # ------------------- BOT ASYNC FUNCTIONS ----------------------------
 
@@ -467,7 +429,7 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_sla
         else:
             track_fetch_failmsg = "Could you not fetch for track data, only artist data will be displayed"
         
-        view = await generate_artists_get_buttons(author, call_type, allembeds, tracks_list, reply_func, token)
+        view = await generate_getmodules_buttons(author, call_type, allembeds, tracks_list, reply_func, token)
 
         if is_slash_withsaved:
             await call_type.edit_original_response(content = f"Selected {data["name"]}", view = None)
@@ -539,7 +501,7 @@ async def fetch_playlist(call_type, playlist_uri, author, token, reply_func):
     if data and response_code == 200:
         
         allembeds, track_lists = embedder.format_get_playlist(author, data)
-        view = await generate_playlists_get_buttons(author, call_type, allembeds, track_lists, reply_func, token)
+        view = await generate_getmodules_buttons(author, call_type, allembeds, track_lists, reply_func, token)
         
         if isinstance(call_type, discord.Interaction):
             await reply_func(embed=allembeds[0], view = view)
@@ -564,7 +526,7 @@ async def fetch_albums(call_type, album_uri, author, token, reply_func, bot):
     data, response_code = await spotifyapi.request_album_info(album_uri, token)
     if data and response_code == 200:
         allembeds, track_lists = embedder.format_get_album(author, data)
-        view = await generate_albums_get_buttons(author, call_type, allembeds, track_lists, reply_func, token)
+        view = await generate_getmodules_buttons(author, call_type, allembeds, track_lists, reply_func, token)
         
         if isinstance(call_type, discord.Interaction):
             await reply_func(embed=allembeds[0], view = view)
@@ -660,52 +622,50 @@ Example: `s!save artists` [Spotify URL, URI or Direct ID]
 
 # List Saved Artists
 async def list(call_type, author, listtarget, *args):
-    saved_artists_list = retrieve_artists()
-    listembed = embedder.format_list_artist(author, saved_artists_list)
-    
+    data_type = listtarget.lower()
     reply_func = get_reply_method(call_type)
+    
+    saved_list = fetch_saved_list(data_type)
+    
     if_error = f"The parameter of the list function `{listtarget}` is invalid."
-    if listtarget.lower() == 'artists':
+    
+    # Check if saved_list is empty to confirm data_type validity
+    if saved_list:
+        listembed = embedder.format_list(author, data_type, saved_list)
         await reply_func(embed=listembed)
+
     else:
         await reply_func(if_error)
+    
+    return
 
-async def get_saved_module(call_type, reply_func, author, bot, token):
-    if isinstance(call_type, discord.Message):
-    
-        saved_artists_list = retrieve_artists()
-        listembed = embedder.format_list_artist(author, saved_artists_list)
-        await reply_func("Please specify (by number) which saved element you want to retrieve:", embed=listembed)
-        
-        # Await for user input
-        interaction_msg = await wait_for_user_input(call_type, author, bot)
-        artisturi, fail = retrieve_saved(author, interaction_msg)
-    
-        if fail:
-            await reply_func(fail)
-            return
-        else:
-            return artisturi
-    
-    
-    elif isinstance(call_type, discord.Interaction):
-        saved_artists_list = retrieve_artists()
-        await generate_artist_dropdown(author, call_type, saved_artists_list, token, reply_func)
-        
-        return
-
-# Get Command        
+#Get Command        
 async def get(call_type, author, bot, searchtarget, u_input, token, *args):
     reply_func = get_reply_method(call_type)
-    bot_msg = None
+    
+    #ALl Search Targets
+    search_mappings = {
+        "artists": ("Artist", fetch_artists),
+        "tracks": ("Track", fetch_track),
+        "playlists": ("Playlist", fetch_playlist),
+        "albums": ("Album", fetch_albums),
+        "users": ("User", fetch_users),
+    }
 
-    if searchtarget.lower() == 'artists':
+    searchtarget = searchtarget.lower()
+    
+    if searchtarget in search_mappings:
+        uri_type, fetch_function = search_mappings[searchtarget]
+        
         try:
-            artisturi = extract_id(u_input, "Artist")
+            # Attempt to extract the URI
+            uri = extract_id(u_input, uri_type)
             
-            if artisturi == "use_saved":
-                artisturi = await get_saved_module(call_type, reply_func, author, bot, token) 
+            # Special handling for saved data types that require "use_saved"
+            if uri == "use_saved" and uri_type in {"Artist", "Track", "Album", "Playlist"}:
+                uri = await get_saved_module(call_type, reply_func, author, bot, token, searchtarget)
                 
+                # Return immediately if using discord.Interaction
                 if isinstance(call_type, discord.Interaction):
                     return
             
@@ -713,53 +673,59 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
             await reply_func(value_error)
             return
 
-        await fetch_artists(call_type, artisturi, author, token, reply_func, False)
-        return
-    
-    elif searchtarget.lower() == 'tracks':
-        try:
-            trackuri = extract_id(u_input, "Track")
-            
-        except ValueError as value_error:
-            await reply_func(value_error)
-            return
-        
-        await fetch_track(call_type, trackuri, author, token, reply_func)
-        return
-    
-    elif searchtarget.lower() == "playlists":
-        try:
-            playlisturi = extract_id(u_input, "Playlist")
-        except ValueError as value_error:
-            await reply_func(value_error)
-            return
-        
-        await fetch_playlist(call_type, playlisturi, author, token, reply_func)
-        return
-    
-    elif searchtarget.lower() == "albums":
-        try:
-            albumuri = extract_id(u_input, "Album")
-        except ValueError as value_error:
-            await reply_func(value_error)
-            return
-        
-        await fetch_albums(call_type, albumuri, author, token, reply_func, bot)
-        return
-        
-    elif searchtarget.lower() == "users":
-        try:
-            useruri = extract_id(u_input, "User")
 
-        except ValueError as value_error:
-            await reply_func(value_error)
-            return
+        # Fetch with the determined function
+        if uri_type == "Artist" or uri_type == "Album":  # Fetch functions with additional parameters
+            await fetch_function(call_type, uri, author, token, reply_func, bot if uri_type == "Album" else False)
+        else:
+            await fetch_function(call_type, uri, author, token, reply_func)
         
-        await fetch_users(call_type, useruri, author, token, reply_func)
-        return
-    
     else:
         await reply_func(f"The parameter of the get command `{searchtarget}` is invalid.")
+
+async def get_saved_module(call_type, reply_func, author, bot, token, data_type):
+    """
+    Retrieves a saved item based on user interaction, generalized for multiple data types.
+    
+    Parameters:
+        call_type (discord.Message or discord.Interaction): The type of call for interaction.
+        reply_func (func): Function to send messages.
+        author (object): The author object.
+        bot (object): The bot instance.
+        token (str): Authorization token.
+        data_type (str): The type of data to retrieve (e.g., 'artist', 'track', 'playlist').
+    """
+    # Use the unified fetch function for retrieving saved data
+    saved_data_list = fetch_saved_list(data_type)
+    
+    # Ensure format_list function exists for the specified data type
+    if not saved_data_list:
+        await reply_func(f"No saved {data_type.capitalize()} found.")
+        return
+
+    # For discord.Message interaction type
+    if isinstance(call_type, discord.Message):
+        list_embed = embedder.format_list(author, data_type.rstrip("s"), saved_data_list)
+        await reply_func(
+            f"Please specify (by number) which of the saved {data_type} you want to retrieve:",
+            embed=list_embed
+        )
+        
+        # Await user input
+        interaction_msg = await wait_for_user_input(call_type, author, bot)
+        data_uri, fail = retrieve_saved_on_select(author, data_type, interaction_msg)
+        
+        if fail:
+            await reply_func(fail)
+            return
+        else:
+            return data_uri
+
+    # For discord.Interaction type
+    elif isinstance(call_type, discord.Interaction):
+        await generate_dropdown(author, call_type, saved_data_list, token, reply_func, data_type)
+        return
+
 
 # Temporary Save Artist (Will Update Later)
 async def save(call_type, author, savetarget, u_input, token, *args):
@@ -775,7 +741,7 @@ async def save(call_type, author, savetarget, u_input, token, *args):
             if data and response_code == 200:
                 artistname = data.get('name', 'Unknown Artist')
                 # Save artist info
-                statusmsg = append_saved(author, artisturi, artistname)
+                statusmsg = append_saved(author, artisturi, artistname, "artist")
             else:
                 # Handle invalid or failed API responses
                 statusmsg = (

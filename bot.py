@@ -23,7 +23,7 @@ bot = discord.Client(intents=discord.Intents.all())
 @bot.event
 async def on_ready():
     print(f"{GREEN}{bot.user.name} has connected to Discord Successfully!{RESET}")
-    presaved_artist = b_commands.load_ps_artist()
+    presaved_artist = b_commands.load_ps_data("artist")
     if len(presaved_artist) > 0:
         print(f"{LIGHT_BLUE}Loaded presaved artists for {len(presaved_artist)} users{RESET}")
     else:
