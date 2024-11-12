@@ -48,6 +48,18 @@ async def setup_slash_commands(token, bot):
         author = interaction.user
         await b_commands.get(interaction, author, bot, "playlists", id, access_token)
         
+    @tree.command(name="get_album_byid", description="Search and Retrieve Track by URI code")
+    @discord.app_commands.describe(id="Enter the Track URI, URL, or ID:")
+    async def get_album_byid_command(interaction: discord.Interaction, id: str):    
+        author = interaction.user
+        await b_commands.get(interaction, author, bot, "albums", id, access_token)
+
+    @tree.command(name="get_user_byid", description="Search and Retrieve Track by URI code")
+    @discord.app_commands.describe(id="Enter the Track URI, URL, or ID:")
+    async def get_album_byid_command(interaction: discord.Interaction, id: str):    
+        author = interaction.user
+        await b_commands.get(interaction, author, bot, "users", id, access_token)
+        
     @tree.command(name="save_artist_byid", description="Save Artist by URI code")
     @discord.app_commands.describe(id="Enter the Artist URI, URL, or ID:")
     async def save_artist_byid_command(interaction: discord.Interaction, id: str):    
