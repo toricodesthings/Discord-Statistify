@@ -5,9 +5,7 @@ from urllib.parse import urlparse
 from discord.ui import View, Select, Button
 
 
-# -------------------DISCORD UI Generation----------------------------
-
-
+#================DISCORD UI Generation================
 #Custom View Class for Dropdown
 class CustomView(View):
     def __init__(self, *items):
@@ -17,24 +15,13 @@ class CustomView(View):
     def set_message(self, msg):
         self.msg = msg
 
-
+#================DROPDOWN MENU================
 #Saved Retrieval
 #Generate Dropdown for Saved Pathway
 async def generate_dropdown(author, call_type, saved_data, token, reply_func, data_type):
-    """
-    Generates a dropdown menu for selecting a saved item (artist, track, playlist, etc.).
-    
-    Parameters:
-        author (object): The author object (used in callbacks).
-        call_type (str): The type of call or interaction.
-        saved_data (list): The list of saved items to display.
-        token (str): Authorization token.
-        reply_func (func): Function to send messages.
-        data_type (str): The type of data (e.g., 'artist', 'track', 'playlist').
-    """
-    # Map data type to display label and value key
-    label_key = "name"  # Generalized key for the item's name
-    url_key = "url"     # Generalized key for the item's URI/URL
+    data_type = data_type.rstrip("s")
+    label_key = data_type
+    url_key = f"{data_type}_url"
     
     selections = Select(
         placeholder=f"Select a {data_type}...",
@@ -48,6 +35,7 @@ async def generate_dropdown(author, call_type, saved_data, token, reply_func, da
     
     async def select_callback(interaction: discord.Interaction):
         selected_uri = selections.values[0]
+        await interaction.response.defer()  # Acknowledge the interaction to prevent timeout
         selections.disabled = True
         view = View()
         view.add_item(selections)
@@ -63,7 +51,7 @@ async def generate_dropdown(author, call_type, saved_data, token, reply_func, da
         fetch_function = fetch_function_mapping.get(data_type)
         
         if fetch_function:
-            await fetch_function(call_type, selected_uri, author, token, reply_func, data_type == "artist")
+            await fetch_function(call_type, selected_uri, author, token, interaction.followup.send, True)
         
     selections.callback = select_callback
     view = View()
@@ -75,10 +63,11 @@ async def generate_dropdown(author, call_type, saved_data, token, reply_func, da
         view=view,
         ephemeral=True
     )
-
+    
 #Track Retrievals
 #Track Selection Dropdown for Artist, Playlist and Album modules
 async def generate_track_selection(author, call_type, track_items, token, reply_func):
+    
     # Create a dropdown menu with track options
     selections = Select(
         placeholder="Select a track...",
@@ -104,12 +93,11 @@ async def generate_track_selection(author, call_type, track_items, token, reply_
     view = View()
     view.add_item(selections)
 
-    # Send the dropdown menu as a follow-up message
     await reply_func(
         "Please select a track for more info:",
         view=view,
     )
-#0-----------------------------------------------------------------------------------------------------------------------
+#================DROPDOWN MENU================
 
 #Generate Previous, Next, and Get Info Buttons for Get Command - Artists
 async def generate_artists_get_button(author, call_type, allembeds, track_items, reply_func, token):
@@ -195,6 +183,7 @@ async def generate_getmodules_buttons(author, call_type, allembeds, track_items,
             page = int(state["current_page"])
             await view.msg.edit(embed=allembeds[page], view=view)
             await call_type.response.defer()
+            
 
         prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
         next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
@@ -219,7 +208,6 @@ async def generate_tracks_get_buttons(call_type, allembeds, reply_func):
         return
     state = {"current_page": 0}
     msg: None
-    
 
     async def prev_click(call_type):
         if state["current_page"] > 0:
@@ -251,8 +239,9 @@ async def generate_tracks_get_buttons(call_type, allembeds, reply_func):
 
     return view
 
+#================DISCORD UI Generation================
 
-# ------------------- Non ASYNC FUNCTIONS ----------------------------
+##===============NON ASYNC Functions================
 
 #Convert Message to Functions
 def identify_commands(ctx):
@@ -274,7 +263,7 @@ def get_reply_method(call_type):
 #Loads presaved data from JSON
 def load_ps_data(data_type):
     root_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    file_path = os.path.join(root_folder, 'saved_data', f'saved{data_type}s.json')
+    file_path = os.path.join(root_folder, 'saved_data', f'saved{data_type}.json')
     
     try:
         with open(file_path, "r") as file:
@@ -326,18 +315,6 @@ def retrieve_saved_on_select(author, data_type, interaction_msg):
     
 # Add data to existing list for speific user 
 def append_saved(author, data_uri, data_name, data_type):
-    """
-    Appends new saved data (artist, track, playlist, etc.) for the given author.
-    
-    Parameters:
-        author (object): The author object with an id attribute.
-        data_uri (str): The URI of the data to be saved.
-        data_name (str): The name of the data to be saved.
-        data_type (str): The type of data (e.g., 'artist', 'track', 'playlist').
-        
-    Returns:
-        str: Success or error message.
-    """
     author_id = str(author.id)
     presaved_data = load_ps_data(data_type)
  
@@ -370,8 +347,7 @@ def append_saved(author, data_uri, data_name, data_type):
         return f"Save command encountered an exception: {str(e)}"
 
 
-#Extract ID
-    
+#Extract ID from User Input
 def extract_id(u_input, input_type):
     valid_lengths = {"Artist": 22, "Track": 22, "Album": 22, "Playlist": 22, "User": 28}
     
@@ -418,7 +394,7 @@ def fetch_saved_list(data_type):
         
 # ------------------- BOT ASYNC FUNCTIONS ----------------------------
 
-async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_slash_withsaved):
+async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_slash_withsaved=False):
     # Fetch artist information and top tracks
     data, response_code_a = await spotifyapi.request_artist_info(artist_uri, token)
     track_data, response_code_t = await spotifyapi.request_artist_toptracks(artist_uri, token)
@@ -464,7 +440,7 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_sla
         else:
             await reply_func(bot_msg)
         
-async def fetch_track(call_type, track_uri, author, token, reply_func, dropdown_pathway=False):
+async def fetch_track(call_type, track_uri, author, token, reply_func, dropdown_pathway=False, is_slash_withsaved=False):
     data, response_code_t = await spotifyapi.request_track_info(track_uri, token)
     audio_data, response_code_taf = await spotifyapi.request_track_audiofeatures(track_uri, token)
     
@@ -474,20 +450,25 @@ async def fetch_track(call_type, track_uri, author, token, reply_func, dropdown_
             
             view = await generate_tracks_get_buttons(call_type, allembeds, reply_func)
             
-            if not dropdown_pathway:
-                if isinstance(call_type, discord.Interaction):
-                    await reply_func(embed=allembeds[0], view = view)
+            if is_slash_withsaved:
+                await call_type.edit_original_response(content=f"Selected {data['name']}", view=None)
+                msg = await call_type.followup.send(embed=allembeds[0], view=view)
+                view.set_message(msg)
+            else:
+                if not dropdown_pathway:
+                    if isinstance(call_type, discord.Interaction):
+                        await reply_func(embed=allembeds[0], view=view)
+                        msg = await call_type.original_response()
+                        view.set_message(msg)
+                    else:
+                        msg = await reply_func(embed=allembeds[0], view=view)
+                        view.set_message(msg)
+                else:
                     msg = await call_type.original_response()
                     view.set_message(msg)
-                else:
-                    msg = await reply_func(embed=allembeds[0], view = view)
-                    view.set_message(msg)
-            else:
-                msg = await call_type.original_response()
-                view.set_message(msg)
-                await msg.edit(embed=allembeds[0], view=view)
-                
-            return
+                    await msg.edit(embed=allembeds[0], view=view)
+                    
+                return
         
     # Error Handling 
     if response_code_t == 400 and response_code_taf == 400:
@@ -498,7 +479,7 @@ async def fetch_track(call_type, track_uri, author, token, reply_func, dropdown_
         bot_msg = f"API Requests failed with status codes: {response_code_t} & {response_code_taf}"
     await reply_func(bot_msg)
     
-async def fetch_playlist(call_type, playlist_uri, author, token, reply_func):
+async def fetch_playlist(call_type, playlist_uri, author, token, reply_func, is_slash_withsaved=False):
 
     data, response_code = await spotifyapi.request_playlist_info(playlist_uri, token)
     
@@ -507,16 +488,20 @@ async def fetch_playlist(call_type, playlist_uri, author, token, reply_func):
         allembeds, track_lists = embedder.format_get_playlist(author, data)
         view = await generate_getmodules_buttons(author, call_type, allembeds, track_lists, reply_func, token)
         
-        if isinstance(call_type, discord.Interaction):
-            await reply_func(embed=allembeds[0], view = view)
-            msg = await call_type.original_response()
+        if is_slash_withsaved:
+            await call_type.edit_original_response(content = f"Selected {data["name"]}", view = None)
+            msg = await call_type.followup.send(embed = allembeds[0], view = view)
             view.set_message(msg)
         else:
-            msg = await reply_func(embed=allembeds[0], view = view)
-            view.set_message(msg)
-
-        return
-        
+            if isinstance(call_type, discord.Interaction):
+                await reply_func(embed=allembeds[0], view = view)
+                msg = await call_type.original_response()
+                view.set_message(msg)
+            else:
+                msg = await reply_func(embed=allembeds[0], view = view)
+                view.set_message(msg)
+        return  
+    
     # Error Handling 
     if response_code == 400:
         bot_msg = "Invalid artist URI." 
@@ -526,21 +511,25 @@ async def fetch_playlist(call_type, playlist_uri, author, token, reply_func):
         bot_msg = f"API Requests failed with status codes: {response_code}"
     await reply_func(bot_msg)
     
-async def fetch_albums(call_type, album_uri, author, token, reply_func, bot):
+async def fetch_albums(call_type, album_uri, author, token, reply_func, is_slash_withsaved=False):
     data, response_code = await spotifyapi.request_album_info(album_uri, token)
     if data and response_code == 200:
         allembeds, track_lists = embedder.format_get_album(author, data)
         view = await generate_getmodules_buttons(author, call_type, allembeds, track_lists, reply_func, token)
         
-        if isinstance(call_type, discord.Interaction):
-            await reply_func(embed=allembeds[0], view = view)
-            msg = await call_type.original_response()
+        if is_slash_withsaved:
+            await call_type.edit_original_response(content = f"Selected {data["name"]}", view = None)
+            msg = await call_type.followup.send(embed = allembeds[0], view = view)
             view.set_message(msg)
         else:
-            msg = await reply_func(embed=allembeds[0], view = view)
-            view.set_message(msg)
-        
-        return
+            if isinstance(call_type, discord.Interaction):
+                await reply_func(embed=allembeds[0], view = view)
+                msg = await call_type.original_response()
+                view.set_message(msg)
+            else:
+                msg = await reply_func(embed=allembeds[0], view = view)
+                view.set_message(msg)
+        return  
             
     # Error Handling 
     if response_code == 400:
@@ -679,10 +668,8 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
 
 
         # Fetch with the determined function
-        if uri_type == "Artist" or uri_type == "Album":  # Fetch functions with additional parameters
-            await fetch_function(call_type, uri, author, token, reply_func, bot if uri_type == "Album" else False)
-        else:
-            await fetch_function(call_type, uri, author, token, reply_func)
+
+        await fetch_function(call_type, uri, author, token, reply_func)
         
     else:
         await reply_func(f"The parameter of the get command `{searchtarget}` is invalid.")
@@ -730,8 +717,6 @@ async def get_saved_module(call_type, reply_func, author, bot, token, data_type)
         await generate_dropdown(author, call_type, saved_data_list, token, reply_func, data_type)
         return
 
-
-# Temporary Save Artist (Will Update Later)
 async def save(call_type, author, savetarget, u_input, token, *args):
     reply_func = get_reply_method(call_type)
     data_type = savetarget.lower()
