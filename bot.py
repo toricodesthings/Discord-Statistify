@@ -43,55 +43,55 @@ async def on_ready():
         
 def gather_command_argument(command, cmd_func, message, author, bot, access_token, params):
     func_params = inspect.signature(cmd_func).parameters
+    # Define potential arguments and filter based on function's required parameters
     possible_args = {
         'call_type': message,
         'author': author,
         'bot': bot,
         'token': access_token
     }
-    
-    # Store only required parameters
-    pass_args = {arg: v for arg, v in possible_args.items() if arg in func_params}
+    pass_args = {arg: possible_args[arg] for arg in func_params if arg in possible_args}
+
     param_iter = iter(params)
-    # If requied, assign user input parameters to remaining positional arguments
     for param_name, param in func_params.items():
-        if param_name in pass_args:
-            continue
-        if param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY):
-            try:
-                pass_args[param_name] = next(param_iter)
-            except StopIteration:
-                if param.default is param.empty:
-                    raise ValueError(f"The command {command} is missing the required parameter. See help for more!")
+        if param_name not in pass_args and param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY):
+            if param.default is not param.empty:
+                pass_args[param_name] = next(param_iter, param.default)
+            else:
+                try:
+                    pass_args[param_name] = next(param_iter)
+                except StopIteration:
+                    raise ValueError(f"The command {command} is missing a required parameter. See help for more!")
+
     return pass_args
 
 @bot.event
 async def on_message(message):
-    # Store Variables
-    author = message.author
-    ctx = message.content
-    
-    # Ignore self messages
-    if author.bot:
+    # Ignore messages from bots
+    if message.author.bot:
         return
 
-    # Command Handling Module
+    ctx = message.content
+    # Command Handling
     if ctx.lower().startswith("s!"):
         if len(ctx) < 3:
             await message.reply("Hello there. If you need help, run /help or s!help")
-        else:
-            command, params = b_commands.identify_commands(ctx)
+            return
 
-            cmd_func = globals().get(command) or getattr(b_commands, command, None)
-            if cmd_func and callable(cmd_func):
-                try:
-                    # Gather arguments and call the command
-                    pass_args = gather_command_argument(command, cmd_func, message, author, bot, access_token, params)
-                    await cmd_func(**pass_args)
-                except ValueError as ve:
-                    await message.reply(ve)
-            else:
-                await message.reply(f"The command you entered '{command}' is invalid.")
+        command, params = b_commands.identify_commands(ctx)
+        cmd_func = globals().get(command) or getattr(b_commands, command, None)
+
+        if not (cmd_func and callable(cmd_func)):
+            await message.reply(f"The command you entered '{command}' is invalid.")
+            return
+
+        try:
+            # Gather arguments and call the command
+            pass_args = gather_command_argument(command, cmd_func, message, message.author, bot, access_token, params)
+            await cmd_func(**pass_args)
+        except ValueError as ve:
+            await message.reply(str(ve))
+
                 
 # Run the bot using your bot token
 bot.run(bot_token)
