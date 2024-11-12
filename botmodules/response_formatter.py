@@ -379,7 +379,7 @@ def format_get_album(author, response):
             description=f"Track List Page {(i - max_first_embed_tracks) // max_following_embed_tracks + 2}",
             color=discord.Color.purple()
         )
-        embed.add_field(name="Tracks List", value="\n".join(track_list[i:i + max_following_embed_tracks]), inline=False)
+        embed.add_field(name="Tracks List", value="\n\n".join(track_list[i:i + max_following_embed_tracks]), inline=False)
         if album_image_url:
             embed.set_thumbnail(url=album_image_url)
         embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)

@@ -99,73 +99,39 @@ async def generate_track_selection(author, call_type, track_items, token, reply_
     )
 #================DROPDOWN MENU================
 
-#Generate Previous, Next, and Get Info Buttons for Get Command - Artists
-async def generate_artists_get_button(author, call_type, allembeds, track_items, reply_func, token):
-    
-    if not len(allembeds) > 1:
-        return
-    state = {"current_page": 0}
-    
-    async def prev_click(call_type):
-        if state["current_page"] > 0:
-            state["current_page"] -= 1
-            await update_embed(call_type)
-
-    async def next_click(call_type):
-        if state["current_page"] < len(allembeds) - 1:
-            state["current_page"] += 1
-            await update_embed(call_type)
-
-    async def track_info_click(call_type):
-        await generate_track_selection(author, call_type, track_items, token, reply_func)
-        await call_type.response.defer()
-    
-    async def update_embed(call_type):
-    
-        prev_button.disabled = state["current_page"] == 0
-        next_button.disabled = state["current_page"] == len(allembeds) - 1
-        
-        page = int(state["current_page"])
-    
-        if page > 0:
-            
-            view.remove_item(next_button)
-            view.add_item(get_track_info_button)
-            view.add_item(next_button)
-        else:
-            view.remove_item(get_track_info_button)
-       
-
-        await view.msg.edit(embed=allembeds[page], view=view)
-        await call_type.response.defer()
-
-    prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
-    next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
-    get_track_info_button = Button(label="Get Track Info", style=discord.ButtonStyle.secondary)
-    get_track_info_button.callback = track_info_click
-    prev_button.callback = prev_click
-    next_button.callback = next_click
-    prev_button.disabled = True
-    view = CustomView()
-    view.add_item(prev_button)
-    view.add_item(next_button)
-            
-    return view
-    
 #Generate Previous, Next, and Get Track Info Buttons for Get Function
-async def generate_getmodules_buttons(author, call_type, allembeds, track_items, reply_func, token):
+async def generate_getmodules_buttons(author, call_type, allembeds, track_items, reply_func, token, 
+                                      data_name, data_id, data_type):
     
     view = CustomView()
+
         
     async def track_info_click(call_type):
         await generate_track_selection(author, call_type, track_items, token, reply_func)
         await call_type.response.defer()
+            
+    async def save_button_click(call_type):
+        statusmsg, saved = append_saved(author, data_id, data_name, data_type)
         
+        if saved is True:
+            save_button.disabled = True
+            await update_embed(call_type)
+            await reply_func(statusmsg)
+            
+            return
+
+        await reply_func(statusmsg)
+        await call_type.response.defer()
+
     get_track_info_button = Button(label="Get Track Info", style=discord.ButtonStyle.secondary)
+    save_button = Button(label = "Save", style=discord.ButtonStyle.secondary)
     get_track_info_button.callback = track_info_click
+    save_button.callback = save_button_click
+        
 
     if len(allembeds) > 1:
-        state = {"current_page": 0}
+        state = {"current_page": 0}  # Store current page state here
+        
         async def prev_click(call_type):
             if state["current_page"] > 0:
                 state["current_page"] -= 1
@@ -177,37 +143,55 @@ async def generate_getmodules_buttons(author, call_type, allembeds, track_items,
                 await update_embed(call_type)
                 
         async def update_embed(call_type):
-            prev_button.disabled = state["current_page"] == 0
-            next_button.disabled = state["current_page"] == len(allembeds) - 1
-            
-            page = int(state["current_page"])
-            await view.msg.edit(embed=allembeds[page], view=view)
-            await call_type.response.defer()
-            
 
+            current_page = state["current_page"]  # Retrieve the current page from state
+            prev_button.disabled = current_page == 0
+            next_button.disabled = current_page == len(allembeds) - 1
+            
+            await view.msg.edit(embed=allembeds[current_page], view=view)
+            await call_type.response.defer()
+
+            
         prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
         next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
-    
-        prev_button.disabled = True
-    
         prev_button.callback = prev_click
         next_button.callback = next_click
+        prev_button.disabled = True
+
         view.add_item(prev_button)
         view.add_item(get_track_info_button)
+        view.add_item(save_button)
         view.add_item(next_button)
     else:
-        
+        async def update_embed(call_type):
+            await view.msg.edit(embed=allembeds[0], view=view)
+            await call_type.response.defer()
+
         view.add_item(get_track_info_button)
+        view.add_item(save_button)
 
     return view
     
 #Generate Previous and Next Buttons for Get Command - Tracks Module
-async def generate_tracks_get_buttons(call_type, allembeds, reply_func):
+async def generate_tracks_get_buttons(author, call_type, allembeds, reply_func, data_name, data_id, data_type):
     
     if not len(allembeds) > 1:
         return
     state = {"current_page": 0}
     msg: None
+    
+    async def save_button_click(call_type):
+        statusmsg, saved = append_saved(author, data_id, data_name, data_type)
+        
+        if saved is True:
+            save_button.disabled = True
+            await update_embed(call_type)
+            await reply_func(statusmsg)
+            
+            return
+
+        await reply_func(statusmsg)
+        await call_type.response.defer()
 
     async def prev_click(call_type):
         if state["current_page"] > 0:
@@ -233,8 +217,12 @@ async def generate_tracks_get_buttons(call_type, allembeds, reply_func):
     prev_button.callback = prev_click
     next_button.callback = next_click
     
+    save_button = Button(label = "Save", style=discord.ButtonStyle.secondary)
+    save_button.callback = save_button_click
+    
     view = CustomView()
     view.add_item(prev_button)
+    view.add_item(save_button)
     view.add_item(next_button)
 
     return view
@@ -279,7 +267,7 @@ def load_ps_data(data_type):
 #Add new artists to database (user based)
 def modify_ps_data(new_data, data_type):    
     root_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    file_path = os.path.join(root_folder, 'saved_data', f'saved{data_type}s.json')
+    file_path = os.path.join(root_folder, 'saved_data', f'saved{data_type}.json')
     
     try:
         with open(file_path, "w") as file:
@@ -314,17 +302,17 @@ def retrieve_saved_on_select(author, data_type, interaction_msg):
     
     
 # Add data to existing list for speific user 
-def append_saved(author, data_uri, data_name, data_type):
+def append_saved(author, data_id, data_name, data_type):
     author_id = str(author.id)
     presaved_data = load_ps_data(data_type)
  
-    
+    data_type_formatted = data_type.rstrip("s")
     # Construct the dynamic key based on data_type
-    url_key = f"{data_type}_url"
+    url_key = f"{data_type_formatted}_url"
 
     # Check if any item in presaved_data has the same URI
-    if any(item.get(url_key) == data_uri for item in presaved_data.get(author_id, [])):
-        return f"You have already saved the {data_type} `{data_name}`"
+    if any(item.get(url_key) == data_id for item in presaved_data.get(author_id, [])):
+        return f"You have already saved `{data_name}` in your {data_type} list", True
 
 
     def sanitize_json_string(value):
@@ -334,17 +322,17 @@ def append_saved(author, data_uri, data_name, data_type):
 
     # Only apply `sanitize_json_string` to `data_name`
     presaved_data.setdefault(author_id, []).append({
-        f"{data_type}": sanitize_json_string(data_name),
-        f"{data_type}_url": data_uri 
+        f"{data_type_formatted}": sanitize_json_string(data_name),
+        f"{data_type_formatted}_url": data_id 
     })
 
     
     # Attempt to save changes
     try:
         modify_ps_data(presaved_data, data_type)
-        return f"Successfully saved {data_type} `{data_name}`"
+        return f"Successfully saved the {data_type_formatted} `{data_name}`", False
     except Exception as e:
-        return f"Save command encountered an exception: {str(e)}"
+        return f"Save command encountered an exception: {str(e)}", False
 
 
 #Extract ID from User Input
@@ -401,6 +389,9 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_sla
 
     if data and response_code_a == 200:
         allembeds = [embedder.format_get_artist(author, data)]
+        data_name = data["name"]
+        data_id = data["uri"]
+        data_type = "Artist"
 
         if track_data and response_code_t == 200:
             track_embeds_list, tracks_list = await embedder.format_track_embed(author, track_data, token)
@@ -409,7 +400,8 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_sla
         else:
             track_fetch_failmsg = "Could you not fetch for track data, only artist data will be displayed"
         
-        view = await generate_getmodules_buttons(author, call_type, allembeds, tracks_list, reply_func, token)
+        view = await generate_getmodules_buttons(author, call_type, allembeds, tracks_list, reply_func, token, 
+                                                 data_name, extract_id(data_id, data_type), "artists")
 
         if is_slash_withsaved:
             await call_type.edit_original_response(content = f"Selected {data["name"]}", view = None)
@@ -445,10 +437,16 @@ async def fetch_track(call_type, track_uri, author, token, reply_func, dropdown_
     audio_data, response_code_taf = await spotifyapi.request_track_audiofeatures(track_uri, token)
     
     if data and response_code_t == 200:
+        
+        data_name = data["name"]
+        data_id = data["uri"]
+        data_type = "Track"
+        
         if audio_data and response_code_taf == 200:
             allembeds = embedder.format_get_track(author, data, audio_data)
             
-            view = await generate_tracks_get_buttons(call_type, allembeds, reply_func)
+            view = await generate_tracks_get_buttons(author, call_type, allembeds, reply_func,
+                                                     data_name, extract_id(data_id, data_type), "tracks")
             
             if is_slash_withsaved:
                 await call_type.edit_original_response(content=f"Selected {data['name']}", view=None)
@@ -484,9 +482,14 @@ async def fetch_playlist(call_type, playlist_uri, author, token, reply_func, is_
     data, response_code = await spotifyapi.request_playlist_info(playlist_uri, token)
     
     if data and response_code == 200:
+    
+        data_name = data["name"]
+        data_id = data["uri"]
+        data_type = "Playlist"
         
         allembeds, track_lists = embedder.format_get_playlist(author, data)
-        view = await generate_getmodules_buttons(author, call_type, allembeds, track_lists, reply_func, token)
+        view = await generate_getmodules_buttons(author, call_type, allembeds, track_lists, reply_func, token,
+                                                 data_name, extract_id(data_id, data_type), "playlists")
         
         if is_slash_withsaved:
             await call_type.edit_original_response(content = f"Selected {data["name"]}", view = None)
@@ -515,7 +518,12 @@ async def fetch_albums(call_type, album_uri, author, token, reply_func, is_slash
     data, response_code = await spotifyapi.request_album_info(album_uri, token)
     if data and response_code == 200:
         allembeds, track_lists = embedder.format_get_album(author, data)
-        view = await generate_getmodules_buttons(author, call_type, allembeds, track_lists, reply_func, token)
+        data_name = data.get("name", "Unknown Album")
+        data_id = data["uri"]
+        data_type = "Album"
+        
+        view = await generate_getmodules_buttons(author, call_type, allembeds, track_lists, reply_func, token,
+                                                 data_name, extract_id(data_id, data_type), "albums")
         
         if is_slash_withsaved:
             await call_type.edit_original_response(content = f"Selected {data["name"]}", view = None)
@@ -704,13 +712,13 @@ async def get_saved_module(call_type, reply_func, author, bot, token, data_type)
         
         # Await user input
         interaction_msg = await wait_for_user_input(call_type, author, bot)
-        data_uri, fail = retrieve_saved_on_select(author, data_type, interaction_msg)
+        data_id, fail = retrieve_saved_on_select(author, data_type, interaction_msg)
         
         if fail:
             await reply_func(fail)
             return
         else:
-            return data_uri
+            return data_id
 
     # For discord.Interaction type
     elif isinstance(call_type, discord.Interaction):
@@ -734,15 +742,15 @@ async def save(call_type, author, savetarget, u_input, token, *args):
         
         try:
             # Attempt to extract the URI
-            data_uri = extract_id(u_input, uri_type)
+            data_id = extract_id(u_input, uri_type)
             
             # API Request to Fetch Data
-            data, response_code = await api_request_function(data_uri, token)
+            data, response_code = await api_request_function(data_id, token)
             
             if data and response_code == 200:
                 data_name = data.get('name', f"Unknown {uri_type}")
                 # Save data info
-                statusmsg = append_saved(author, data_uri, data_name, uri_type.lower())
+                statusmsg, saved = append_saved(author, data_id, data_name, data_type)
             else:
                 # Handle invalid or failed API responses
                 statusmsg = (
