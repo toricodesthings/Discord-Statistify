@@ -12,7 +12,7 @@ This is a work-in-progress discord that connects with Spotify's Web API to retri
 + ~~Expand get command to albums~~
 + Add buttons to save in all get commands
 + Search function for categories
-+ Expand save command to tracks, artists, and playlists
++ ~Expand save command to tracks, artists, and playlists~
 
 # Lib Links 
 * https://pypi.org/project/aiohttp/
