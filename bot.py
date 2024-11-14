@@ -19,10 +19,36 @@ load_dotenv()
 bot_token, spotify_cid, spotify_csecret = os.getenv("DISCORD_TOKEN"), os.getenv("CLIENT_ID"), os.getenv("CLIENT_SECRET") 
 bot = discord.Client(intents=discord.Intents.all())
 
+def load_settings():
+    root_folder = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(root_folder, "botmodules", "settings.json")
+    
+    default = {
+        "monthly_listener_scraping": False,
+        "per_track_playcount_scraping": False,
+        "syncslash_onstart": False
+    } 
+    
+    try:
+        with open(file_path, "r") as file:
+            settings_from_file = json.load(file)
+            print("Loaded Settings File! Passing it...")
+            return settings_from_file  # Return the loaded settings as a dictionary
+                
+    except FileNotFoundError:
+        print(f"{RED}settings.json not found, using default settings values.{RESET}")
+        return default
+
+    except json.JSONDecodeError:
+        print(f"{RED}Error decoding settings.json. Check the file format. Using default settings values{RESET}")
+        return default
+
+
 #Report when Bot is Ready and Sync Slash Commands
 @bot.event
 async def on_ready():
     print(f"{GREEN}{bot.user.name} has connected to Discord Successfully!{RESET}")
+    
     # Start Token Request
     token, response_code, response_msg = await auth.request_token(spotify_cid, spotify_csecret)
     if not token == 0:
@@ -30,25 +56,41 @@ async def on_ready():
         access_token = token
         print(f"{GREEN}Spotify API access granted with token: {access_token}{RESET}")
     else:
-        print(f"{RED}Spotify API access error with code: {response_code}\nError Message: {response_msg}{RESET}")
-        
-    # Load and Sync Slash Commands Module and Pass access_token to Module
-    try:
-        synced = await slash_commands.setup_slash_commands(access_token, bot)
-        print(f"{LIGHT_BLUE}Bot has synced {len(synced)} command(s){RESET}")
-    except Exception as e:
-        print(e)
+        print(f"{RED}Spotify API access error with code: {response_code}\nError Message: {response_msg}")
+        print(f"Bot has no access to Spotify API, please troubleshoot and restart!{RESET}")
+        return
     
+    settings = load_settings()
+    print(b_commands.sync_settings(settings))
+    
+    try:
+        await slash_commands.setup_slash_commands(access_token, bot)
+    except Exception as e:
+        print(e)    
+
+    if settings.get("syncslash_onstart", False) is True:
+    # Load and Sync Slash Commands Module and Pass access_token to Module
+        try:
+            synced = await slash_commands.automatic_sync(bot)
+            print(f"{LIGHT_BLUE}Bot has automatically synced {len(synced)} command(s){RESET}")
+        except Exception as e:
+            print(e)    
+    else:
+        print(f"{LIGHT_BLUE}Slash commands are not synced automatically. You may do this manually by running /sync{LIGHT_BLUE}")
+        
     print(f"{GREEN}Bot is Ready{RESET}")
         
 def gather_command_argument(command, cmd_func, message, author, bot, access_token, params):
     func_params = inspect.signature(cmd_func).parameters
+    
+    
     # Define potential arguments and filter based on function's required parameters
     possible_args = {
         'call_type': message,
         'author': author,
         'bot': bot,
-        'token': access_token
+        'token': access_token,
+
     }
     pass_args = {arg: possible_args[arg] for arg in func_params if arg in possible_args}
 

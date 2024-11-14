@@ -1,0 +1,5 @@
+{
+    "monthly_listener_scraping": true,
+    "per_track_playcount_scraping": false,
+    "syncslash_onstart": false
+}

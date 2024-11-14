@@ -1,8 +1,24 @@
 import discord, json, os, asyncio
+from wrapper import datascraper as scraper
 from wrapper import apiwrapper as spotifyapi
 from botmodules import response_formatter as embedder
 from urllib.parse import urlparse
 from discord.ui import View, Select, Button
+
+
+#================Bot Command Default Globals================
+#Global settings for fetch command
+SETTINGS = {
+    "ml_scrape": False,
+    "pertrack_scrape": False   
+}
+
+#Sync Global Settings for Bot
+def sync_settings(new_settings):
+    SETTINGS["ml_scrape"] = new_settings.get("monthly_listener_scraping", False)
+    SETTINGS["pertrack_scrape"] = new_settings.get("per_track_playcount_scraping", False)
+    
+    return "Settings successfully synced in Commands' Module"
 
 
 #================DISCORD UI Generation================
@@ -388,11 +404,35 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_sla
     track_data, response_code_t = await spotifyapi.request_artist_toptracks(artist_uri, token)
 
     if data and response_code_a == 200:
-        allembeds = [embedder.format_get_artist(author, data)]
         data_name = data["name"]
         data_id = data["uri"]
         data_type = "Artist"
-
+        
+        
+        if SETTINGS["ml_scrape"]:
+            #Pre-Inform Users
+            if is_slash_withsaved:
+                if SETTINGS["ml_scrape"]:
+                    content = f"Selected {data_name}. Retrieval of Monthly Listener Data is `On`, response might take some time."
+                else:
+                    content = f"Selected {data_name}."
+                await call_type.edit_original_response(content=content, view=None)
+            else:
+                if isinstance(call_type, discord.Interaction):
+                    if SETTINGS["ml_scrape"]:
+                        content = "Note: Retrieval of Monthly Listener Data is `On`, response might take some time."
+                        await reply_func(content=content)
+            
+            try:
+                monthly_listener, msg = await scraper.scrape_monthly_listeners(artist_uri)
+            except Exception as e:
+                monthly_listener, msg = "N/A", None
+                print(f"Encountered unexpected scraper error {e}")
+        else:
+            monthly_listener, msg = None, None
+        
+        allembeds = [embedder.format_get_artist(author, data, monthly_listener, msg)]
+        
         if track_data and response_code_t == 200:
             track_embeds_list, tracks_list = await embedder.format_track_embed(author, track_data, token)
             allembeds.extend(track_embeds_list)
@@ -402,21 +442,43 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_sla
         
         view = await generate_getmodules_buttons(author, call_type, allembeds, tracks_list, reply_func, token, 
                                                  data_name, extract_id(data_id, data_type), "artists")
-
-        if is_slash_withsaved:
-            await call_type.edit_original_response(content = f"Selected {data["name"]}", view = None)
-            msg = await call_type.followup.send(content = track_fetch_failmsg, embed = allembeds[0], view = view)
-            view.set_message(msg)
-        else:
-            if isinstance(call_type, discord.Interaction):
-                await reply_func(embed=allembeds[0], view = view)
-                msg = await call_type.original_response()
+        if SETTINGS["ml_scrape"]:
+            if is_slash_withsaved:
+                msg = await call_type.followup.send(content=track_fetch_failmsg, embed=allembeds[0], view=view)
                 view.set_message(msg)
             else:
-                msg = await reply_func(embed=allembeds[0], view = view)
+                if isinstance(call_type, discord.Interaction):
+                    msg = await call_type.followup.send(embed=allembeds[0], view=view)
+                else:
+                    msg = await reply_func(embed=allembeds[0], view=view)
                 view.set_message(msg)
+        else:
+            
+
+            if is_slash_withsaved:
+                if SETTINGS["ml_scrape"]:
+                    content = f"Selected {data["name"]}. Retrieval of Monthly Listener Data is `On`, response might take some time."
+                else: 
+                    content = f"Selected {data["name"]}."
+                await call_type.edit_original_response(content = content, view = None)
+                msg = await call_type.followup.send(content = track_fetch_failmsg, embed = allembeds[0], view = view)
+                view.set_message(msg)
+            else:
+                if is_slash_withsaved:
+                    await call_type.edit_original_response(content = f"Selected {data["name"]}", view = None)
+                    msg = await call_type.followup.send(content = track_fetch_failmsg, embed = allembeds[0], view = view)
+                    view.set_message(msg)
+                else:
+                    if isinstance(call_type, discord.Interaction):
+                        await reply_func(embed=allembeds[0], view = view)
+                        msg = await call_type.original_response()
+                        view.set_message(msg)
+                    else:
+                        msg = await reply_func(embed=allembeds[0], view = view)
+                        view.set_message(msg)
+
         return  
-    
+        
     else:
         if response_code_a == 400 and response_code_t == 400:
             bot_msg = "Invalid artist URI." 
@@ -726,6 +788,7 @@ async def get_saved_module(call_type, reply_func, author, bot, token, data_type)
         return
 
 async def save(call_type, author, savetarget, u_input, token, *args):
+    
     reply_func = get_reply_method(call_type)
     data_type = savetarget.lower()
 
@@ -768,3 +831,93 @@ async def save(call_type, author, savetarget, u_input, token, *args):
 
     await reply_func(f"The parameter of the save command `{savetarget}` is invalid.")
 
+async def search(call_type, author, bot, searchtarget, u_input, token, *args):
+    
+    reply_func = get_reply_method(call_type)
+    data_type = searchtarget.lower()
+    
+    search_mappings = {
+        "artists": ("Artist", fetch_artists),
+        "tracks": ("Track", fetch_track),
+        "playlists": ("Playlist", fetch_playlist),
+        "albums": ("Album", fetch_albums),
+    }
+
+    searchtarget = searchtarget.lower()
+    
+    if searchtarget in search_mappings:
+        uri_type, fetch_function = search_mappings[searchtarget]
+        
+    await reply_func(f"The parameter of the save command `{searchtarget}` is invalid.")
+    return
+    
+    
+    
+    
+    
+    
+#temps, move upwards and implement later
+def load_settings(setting_input):
+    root_folder = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(root_folder, "settings.json")
+    try:
+        with open(file_path, "r") as file:
+            settings_from_file = json.load(file)
+            if setting_input in settings_from_file:
+                value = settings_from_file.get(setting_input)
+        
+    except FileNotFoundError:
+        print(f"settings.json not found, using default settings values.")
+        return None
+    
+    if value:
+        return value
+    else:
+        raise ValueError(f"The {setting_input} parameter must be a valid Setting")
+    
+def modify_setting(new_setting):
+    root_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    file_path = os.path.join(root_folder, f'settings.json')
+    
+    try:
+        with open(file_path, "w") as file:
+            json.dump(new_setting, file, indent=4)
+        return new_setting  # Return the saved data if successful
+    
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error saving {e}")
+        return []  # Return an empty list if any error
+    
+    return
+    
+    
+async def settings(call_type, author, bot, setting_accesstype, setting_input, *args):
+    reply_func = get_reply_method(call_type)
+    access_type = ["set", "read", "list"]
+    
+    
+    if setting_accesstype.lower() in access_type:
+        setting_accesstype = setting_accesstype.lower()
+        if setting_accesstype == "set":
+            try:
+                value = load_settings(setting_input)
+                await reply_func(f"Selected setting {setting_input} is currently set to `{value}`")
+                
+                #generate_settings_set_button
+                
+                    
+            except ValueError as err:
+                reply_func(err)
+        elif setting_accesstype == "list":
+            pass
+        elif setting_accesstype == "read":
+            pass
+        
+            
+        
+        return
+    else:
+        
+        await reply_func(f"The parameter of the settings command `{setting_accesstype}` is invalid.")
+        
+    return
