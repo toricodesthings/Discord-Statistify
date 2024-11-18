@@ -1,5 +1,5 @@
 #Load required libraries
-import discord, json, os, time, inspect
+import discord, json, os, inspect
 from botmodules import slash_commands
 from botmodules import commands as b_commands
 from wrapper import authorizer as auth

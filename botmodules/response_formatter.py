@@ -26,7 +26,7 @@ def format_list(author, list_data_type, saved_list):
     return embed
 
 #Create Embed for Artist (& And Artist Top tracks)
-def format_get_artist(author, response, monthly_listener, errormsg=None):
+def format_get_artist(author, response, monthly_listener=None, errormsg=None):
 
     
     artist_name = response['name']
@@ -45,23 +45,15 @@ def format_get_artist(author, response, monthly_listener, errormsg=None):
     embed.set_thumbnail(url=response['images'][0]['url'])
     embed.add_field(name="Spotify URL", value=response['external_urls']['spotify'], inline=False)
     embed.add_field(name="Followers", value=f"`{response['followers']['total']}`", inline=True)
-    
     if monthly_listener:
         embed.add_field(name="Monthly Listeners", value=f"`{monthly_listener}`", inline=True)
-    
     embed.add_field(name="Popularity Index", value=f"`{response['popularity']}`", inline=True)
-
-    # Only add genres if they exist
     if response['genres']:
-        embed.add_field(name="Genres", value="`\n".join(response['genres']) + "`", inline=True)
-        
-
-
+        embed.add_field(name="Genres", value="`".join(response['genres']) + "`\n", inline=True)
     embed.add_field(name="Full Spotify URI", value=f"`{response['uri']}`", inline=False)
 
     if errormsg:
-        embed.add_field(name="Notes:", value=f"Could not retrieve monthly listner data due to an error:\n{errormsg}", inline=False)
-
+        embed.add_field(name="Notes:", value=f"Could not retrieve monthly listener data due to an error:\n{errormsg}", inline=False)
 
     # Direct footer assignment
     embed.set_footer(text=f"Requested by {author.display_name}", icon_url=author.avatar.url)
@@ -205,7 +197,7 @@ def format_track_audiofeatures(author, response, audiofeatures_response, allembe
     allembeds.append(embed)
     return allembeds
 
-def format_get_track(author, response, audiofeatures_response):
+def format_get_track(author, response, audiofeatures_response, playcount=None, errormsg=None):
     album_name = response['album']['name']
     album_type = response['album']['album_type']
     track_name = response['name']
@@ -232,8 +224,14 @@ def format_get_track(author, response, audiofeatures_response):
     embed.add_field(name="Artist(s)", value=f"`{artist_names}`", inline=False)
     embed.add_field(name="Duration", value=f"`{duration}`", inline=True)
     embed.add_field(name="Popularity", value=f"`{popularity}/100`", inline=True)
+    
+    if playcount:
+        embed.add_field(name="Playcount", value=f"`{playcount}`", inline=True)
     embed.add_field(name="Release Date", value=f"`{release_date}`", inline=True)
     embed.add_field(name="Spotify Track URI", value=f"`{track_uri}`", inline=False)
+    if errormsg:
+        embed.add_field(name="Notes:", value=f"Could not retrieve playcount data due to an error:\n{errormsg}", inline=False)    
+
     embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
     
     allembeds = [embed]

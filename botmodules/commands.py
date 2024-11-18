@@ -66,7 +66,9 @@ async def generate_dropdown(author, call_type, saved_data, token, reply_func, da
         
         fetch_function = fetch_function_mapping.get(data_type)
         
-        if fetch_function:
+        if fetch_function == fetch_track:
+            await fetch_function(call_type, selected_uri, author, token, interaction.followup.send, False, True)
+        else:
             await fetch_function(call_type, selected_uri, author, token, interaction.followup.send, True)
         
     selections.callback = select_callback
@@ -379,10 +381,10 @@ def extract_id(u_input, input_type):
 #Fetch an easily readable and formattable list based on data_type
 def fetch_saved_list(data_type):
     """
-    Retrieves saved data for the specified data type.
+    Retrieves saved data for a specific data type.
     
     Parameters:
-        data_type (str): The type of data to retrieve (e.g., 'artist', 'track', 'playlist').
+        data_type (str): The type of data to retrieve (e.g., 'artist', 'track', 'playlist', 'album).
         
     Returns:
         list: A list of saved items for the given data type.
@@ -404,25 +406,19 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_sla
     track_data, response_code_t = await spotifyapi.request_artist_toptracks(artist_uri, token)
 
     if data and response_code_a == 200:
-        data_name = data["name"]
-        data_id = data["uri"]
-        data_type = "Artist"
-        
-        
-        if SETTINGS["ml_scrape"]:
-            #Pre-Inform Users
+        data_name, data_id, data_type = data["name"], data["uri"], "Artist"
+                    
+        if SETTINGS.get("ml_scrape"):  
+            content = f"Selected {data_name}."
+            if is_slash_withsaved or isinstance(call_type, discord.Interaction):
+                note = "Retrieval of Monthly Listener Data is `On`, response might take some time."
+                content += note  # Append the note if conditions are met
+                
             if is_slash_withsaved:
-                if SETTINGS["ml_scrape"]:
-                    content = f"Selected {data_name}. Retrieval of Monthly Listener Data is `On`, response might take some time."
-                else:
-                    content = f"Selected {data_name}."
                 await call_type.edit_original_response(content=content, view=None)
             else:
-                if isinstance(call_type, discord.Interaction):
-                    if SETTINGS["ml_scrape"]:
-                        content = "Note: Retrieval of Monthly Listener Data is `On`, response might take some time."
-                        await reply_func(content=content)
-            
+                await reply_func(content=content)
+        
             try:
                 monthly_listener, msg = await scraper.scrape_monthly_listeners(artist_uri)
             except Exception as e:
@@ -453,8 +449,6 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_sla
                     msg = await reply_func(embed=allembeds[0], view=view)
                 view.set_message(msg)
         else:
-            
-
             if is_slash_withsaved:
                 if SETTINGS["ml_scrape"]:
                     content = f"Selected {data["name"]}. Retrieval of Monthly Listener Data is `On`, response might take some time."
@@ -496,26 +490,45 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_sla
         
 async def fetch_track(call_type, track_uri, author, token, reply_func, dropdown_pathway=False, is_slash_withsaved=False):
     data, response_code_t = await spotifyapi.request_track_info(track_uri, token)
+    
     audio_data, response_code_taf = await spotifyapi.request_track_audiofeatures(track_uri, token)
     
     if data and response_code_t == 200:
-        
-        data_name = data["name"]
-        data_id = data["uri"]
-        data_type = "Track"
+        data_name, data_id, data_type = data["name"], data["uri"], "Track"
         
         if audio_data and response_code_taf == 200:
-            allembeds = embedder.format_get_track(author, data, audio_data)
+            
+            if SETTINGS["pertrack_scrape"] and not dropdown_pathway:
+                if is_slash_withsaved:
+                    if SETTINGS["pertrack_scrape"]:
+                        content = f"Selected {data_name}. Retrieval of Playcount Data is `On`, response might take some time."
+                    else:
+                        content = f"Selected {data_name}."
+                    await call_type.edit_original_response(content=content, view=None)
+                else:
+                    if isinstance(call_type, discord.Interaction):
+                        if SETTINGS["pertrack_scrape"]:
+                            content = "Note: Retrieval of Playcount Data is `On`, response might take some time."
+                            await reply_func(content=content)
+                
+                try:
+                    playcount, msg = await scraper.scrape_track_playcount(track_uri)
+                except Exception as e:
+                    playcount, msg = "N/A", None
+                    print(f"Encountered unexpected scraper error {e}")
+            else:
+                playcount, msg = None, None
+            
+            allembeds = embedder.format_get_track(author, data, audio_data, playcount, msg)
             
             view = await generate_tracks_get_buttons(author, call_type, allembeds, reply_func,
                                                      data_name, extract_id(data_id, data_type), "tracks")
             
-            if is_slash_withsaved:
-                await call_type.edit_original_response(content=f"Selected {data['name']}", view=None)
-                msg = await call_type.followup.send(embed=allembeds[0], view=view)
-                view.set_message(msg)
-            else:
-                if not dropdown_pathway:
+            if SETTINGS["pertrack_scrape"] and not dropdown_pathway:
+                if is_slash_withsaved:
+                    msg = await call_type.followup.send(embed=allembeds[0], view=view)
+                    view.set_message(msg)
+                else:
                     if isinstance(call_type, discord.Interaction):
                         await reply_func(embed=allembeds[0], view=view)
                         msg = await call_type.original_response()
@@ -523,12 +536,27 @@ async def fetch_track(call_type, track_uri, author, token, reply_func, dropdown_
                     else:
                         msg = await reply_func(embed=allembeds[0], view=view)
                         view.set_message(msg)
-                else:
-                    msg = await call_type.original_response()
+            else:
+            
+                if is_slash_withsaved:
+                    await call_type.edit_original_response(content=f"Selected {data['name']}", view=None)
+                    msg = await call_type.followup.send(embed=allembeds[0], view=view)
                     view.set_message(msg)
-                    await msg.edit(embed=allembeds[0], view=view)
-                    
-                return
+                else:
+                    if not dropdown_pathway:
+                        if isinstance(call_type, discord.Interaction):
+                            await reply_func(embed=allembeds[0], view=view)
+                            msg = await call_type.original_response()
+                            view.set_message(msg)
+                        else:
+                            msg = await reply_func(embed=allembeds[0], view=view)
+                            view.set_message(msg)
+                    else:
+                        msg = await call_type.original_response()
+                        view.set_message(msg)
+                        await msg.edit(embed=allembeds[0], view=view)
+                        
+            return
         
     # Error Handling 
     if response_code_t == 400 and response_code_taf == 400:
@@ -738,9 +766,11 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
 
 
         # Fetch with the determined function
-
-        await fetch_function(call_type, uri, author, token, reply_func)
-        
+        if fetch_function == fetch_track:
+            await fetch_function(call_type, uri, author, token, reply_func, False)
+        else:
+            print("called)")
+            await fetch_function(call_type, uri, author, token, reply_func)
     else:
         await reply_func(f"The parameter of the get command `{searchtarget}` is invalid.")
 

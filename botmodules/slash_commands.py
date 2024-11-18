@@ -34,6 +34,21 @@ async def setup_slash_commands(token, bot):
     async def get_artist_saved_command(interaction: discord.Interaction):
         author = interaction.user
         await b_commands.get(interaction, author, bot, "artists", "saved", ACCESS_TOKEN)
+        
+    @tree.command(name="get_track_saved", description="Retrieve info of Saved Tracks")
+    async def get_track_saved_command(interaction: discord.Interaction):
+        author = interaction.user
+        await b_commands.get(interaction, author, bot, "tracks", "saved", ACCESS_TOKEN)
+        
+    @tree.command(name="get_playlist_saved", description="Retrieve info of Saved Playlists")
+    async def get_playlist_saved_command(interaction: discord.Interaction):
+        author = interaction.user
+        await b_commands.get(interaction, author, bot, "playlists", "saved", ACCESS_TOKEN)
+        
+    @tree.command(name="get_album_saved", description="Retrieve info of Saved Albums")
+    async def get_playlist_saved_command(interaction: discord.Interaction):
+        author = interaction.user
+        await b_commands.get(interaction, author, bot, "albums", "saved", ACCESS_TOKEN)
     
     @tree.command(name="get_track_byid", description="Search and Retrieve Track by URI code")
     @discord.app_commands.describe(id="Enter the Track URI, URL, or ID:")
