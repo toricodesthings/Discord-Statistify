@@ -49,7 +49,7 @@ def format_get_artist(author, response, monthly_listener=None, errormsg=None):
         embed.add_field(name="Monthly Listeners", value=f"`{monthly_listener}`", inline=True)
     embed.add_field(name="Popularity Index", value=f"`{response['popularity']}`", inline=True)
     if response['genres']:
-        embed.add_field(name="Genres", value="`".join(response['genres']) + "`\n", inline=True)
+        embed.add_field(name="Genres", value="".join(f"`{genre}` " for genre in response['genres']).strip(), inline=True)
     embed.add_field(name="Full Spotify URI", value=f"`{response['uri']}`", inline=False)
 
     if errormsg:
@@ -397,3 +397,28 @@ def format_get_album(author, response):
         embeds.append(embed)
 
     return embeds, track_list_for_dropdown
+
+def format_settings(author, data):
+    embed = discord.Embed(
+        title="Settings Overview",
+        description="Here are the current settings:",
+        color=discord.Color.blue()  # You can choose a different color
+    )
+    
+    # Format key-value pairs and add to embed
+    for key, value in data.items():
+        # Convert boolean to a more user-friendly string
+        value_str = "`Enabled`" if value else "`Disabled`"
+        # Add each setting as a field in the embed
+        embed.add_field(name=key.replace("_", " ").title(), value=value_str, inline=False)
+    
+    # Add a footer with author info
+    avatar_url = author.avatar.url if author.avatar else None  # Handle cases where the user has no avatar
+    embed.set_footer(
+        text=f"Requested by {author.display_name}", 
+        icon_url=avatar_url
+    )
+    
+    return embed
+    
+    

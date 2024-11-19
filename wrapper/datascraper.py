@@ -1,13 +1,11 @@
-SPOTIFY_WEB_ENDPOINT = "https://open.spotify.com"
 #Monthly Listener Scraper
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 import requests
+SPOTIFY_WEB_ENDPOINT = "https://open.spotify.com"
 
 #Scrape #1: Monthly Listener
 async def scrape_monthly_listeners(artist_id):
     artist_url = f"{SPOTIFY_WEB_ENDPOINT}/artist/{artist_id}"
-    
-    print(artist_url)
     monthly_listeners = "N/A"  # Default
     
     try:
@@ -55,7 +53,6 @@ async def scrape_monthly_listeners(artist_id):
         monthly_listeners = "N/A"
         return monthly_listeners, None
 
-
 #Scrape #2: Track Playcount
 async def scrape_track_playcount(track_id):
     track_url = f"{SPOTIFY_WEB_ENDPOINT}/track/{track_id}"
@@ -68,7 +65,7 @@ async def scrape_track_playcount(track_id):
 
         async with async_playwright() as session:
             browser = await session.chromium.launch_persistent_context(
-                user_data_dir="/tmp/playwright",  # Use persistent context to avoid repeated loading
+                user_data_dir="/tmp/playwright", 
                 headless=True,
                 args=["--no-sandbox", "--disable-setuid-sandbox"]
             )
@@ -83,11 +80,9 @@ async def scrape_track_playcount(track_id):
                         await route.abort()
                     else:
                         await route.continue_()
-
                 await page.route("**/*", block_unnecessary)
-
                 await page.wait_for_selector("span[data-testid='playcount']", timeout=10000)
-
+                
                 play_count_element = await page.query_selector("span[data-testid='playcount']")
                 play_count = await play_count_element.inner_text() if play_count_element else "N/A"
 

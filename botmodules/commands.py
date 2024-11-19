@@ -20,7 +20,6 @@ def sync_settings(new_settings):
     
     return "Settings successfully synced in Commands' Module"
 
-
 #================DISCORD UI Generation================
 #Custom View Class for Dropdown
 class CustomView(View):
@@ -189,6 +188,46 @@ async def generate_getmodules_buttons(author, call_type, allembeds, track_items,
         view.add_item(save_button)
 
     return view
+
+async def generate_settings_buttons(author, call_type, settingsdata):
+
+    view = CustomView()
+
+    # Callback factory for button interactions
+    async def button_callback(call_type, setting_key: str):
+        # Toggle the value
+        current_value = settingsdata[setting_key]
+        settingsdata[setting_key] = not current_value
+        updated_embed = embedder.format_settings(author, settingsdata)
+
+        # Update the JSON with the new setting
+        modify_setting(settingsdata)
+        sync_settings(settingsdata)
+
+        # Update the button label and style
+        for item in view.children:
+            if item.custom_id == setting_key:
+                item.label = f"{setting_key.replace('_', ' ').title()} ({'On' if not current_value else 'Off'})"
+                item.style = discord.ButtonStyle.green if not current_value else discord.ButtonStyle.red
+
+        # Update the message with the new button states
+        await view.msg.edit(embed=updated_embed, view=view)
+        await call_type.response.defer()
+
+    # Add buttons dynamically based on the settings
+    for setting, value in settingsdata.items():
+        button = Button(
+            label=f"{setting.replace('_', ' ').title()} ({'On' if value else 'Off'})",
+            style=discord.ButtonStyle.green if value else discord.ButtonStyle.red,
+            custom_id=setting  # Use the setting key as the button's custom ID
+        )
+        # Add callback with the current setting's key
+        button.callback = lambda interaction, k=setting: button_callback(interaction, k)
+
+        view.add_item(button)
+
+    return view
+    
     
 #Generate Previous and Next Buttons for Get Command - Tracks Module
 async def generate_tracks_get_buttons(author, call_type, allembeds, reply_func, data_name, data_id, data_type):
@@ -318,7 +357,6 @@ def retrieve_saved_on_select(author, data_type, interaction_msg):
         return None, "Invalid input. Please enter a number."
 
     
-    
 # Add data to existing list for speific user 
 def append_saved(author, data_id, data_name, data_type):
     author_id = str(author.id)
@@ -409,15 +447,16 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_sla
         data_name, data_id, data_type = data["name"], data["uri"], "Artist"
                     
         if SETTINGS.get("ml_scrape"):  
-            content = f"Selected {data_name}."
-            if is_slash_withsaved or isinstance(call_type, discord.Interaction):
-                note = "Retrieval of Monthly Listener Data is `On`, response might take some time."
-                content += note  # Append the note if conditions are met
-                
-            if is_slash_withsaved:
-                await call_type.edit_original_response(content=content, view=None)
+            content = f"Selected {data_name}. "
+            note = "Retrieval of Monthly Listener Data is `On`, response might take some time."
+            
+            if isinstance(call_type, discord.Interaction):
+                if is_slash_withsaved:
+                    await call_type.edit_original_response(content=content+note, view=None)
+                else:
+                    await reply_func(content=content+note)
             else:
-                await reply_func(content=content)
+                await reply_func(note)
         
             try:
                 monthly_listener, msg = await scraper.scrape_monthly_listeners(artist_uri)
@@ -510,6 +549,9 @@ async def fetch_track(call_type, track_uri, author, token, reply_func, dropdown_
                         if SETTINGS["pertrack_scrape"]:
                             content = "Note: Retrieval of Playcount Data is `On`, response might take some time."
                             await reply_func(content=content)
+                    else:
+                        msg = await reply_func(embed=allembeds[0], view=view)
+                        view.set_message(msg)
                 
                 try:
                     playcount, msg = await scraper.scrape_track_playcount(track_uri)
@@ -764,12 +806,10 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
             await reply_func(value_error)
             return
 
-
         # Fetch with the determined function
         if fetch_function == fetch_track:
             await fetch_function(call_type, uri, author, token, reply_func, False)
         else:
-            print("called)")
             await fetch_function(call_type, uri, author, token, reply_func)
     else:
         await reply_func(f"The parameter of the get command `{searchtarget}` is invalid.")
@@ -881,30 +921,19 @@ async def search(call_type, author, bot, searchtarget, u_input, token, *args):
     await reply_func(f"The parameter of the save command `{searchtarget}` is invalid.")
     return
     
-    
-    
-    
-    
-    
 #temps, move upwards and implement later
-def load_settings(setting_input):
-    root_folder = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(root_folder, "settings.json")
+def load_settings():
+    root_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    file_path = os.path.join(root_folder, f'settings.json')
     try:
         with open(file_path, "r") as file:
             settings_from_file = json.load(file)
-            if setting_input in settings_from_file:
-                value = settings_from_file.get(setting_input)
+            return settings_from_file
         
     except FileNotFoundError:
         print(f"settings.json not found, using default settings values.")
         return None
-    
-    if value:
-        return value
-    else:
-        raise ValueError(f"The {setting_input} parameter must be a valid Setting")
-    
+
 def modify_setting(new_setting):
     root_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     file_path = os.path.join(root_folder, f'settings.json')
@@ -912,42 +941,37 @@ def modify_setting(new_setting):
     try:
         with open(file_path, "w") as file:
             json.dump(new_setting, file, indent=4)
-        return new_setting  # Return the saved data if successful
     
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Error saving {e}")
-        return []  # Return an empty list if any error
-    
-    return
     
     
-async def settings(call_type, author, bot, setting_accesstype, setting_input, *args):
+async def settings(call_type, author, bot, setting_accesstype, *args):
     reply_func = get_reply_method(call_type)
-    access_type = ["set", "read", "list"]
-    
+    access_type = ["set", "read"]
     
     if setting_accesstype.lower() in access_type:
+        
         setting_accesstype = setting_accesstype.lower()
         if setting_accesstype == "set":
-            try:
-                value = load_settings(setting_input)
-                await reply_func(f"Selected setting {setting_input} is currently set to `{value}`")
-                
-                #generate_settings_set_button
-                
-                    
-            except ValueError as err:
-                reply_func(err)
-        elif setting_accesstype == "list":
-            pass
-        elif setting_accesstype == "read":
-            pass
-        
+            settings_data = load_settings()
+            settingembed = embedder.format_settings(author, settings_data)
             
-        
-        return
+            view = await generate_settings_buttons(author, call_type, settings_data)
+            
+            if isinstance(call_type, discord.Interaction):
+                await reply_func(embed=settingembed, view = view)
+                msg = await call_type.original_response()
+                view.set_message(msg)
+            else:
+                msg = await reply_func(embed=settingembed, view = view)
+                view.set_message(msg)
+        elif setting_accesstype == "read":
+            settings_data = load_settings()
+            settingembed = embedder.format_settings(author, settings_data)
+            await reply_func(embed=settingembed)
+                
     else:
-        
         await reply_func(f"The parameter of the settings command `{setting_accesstype}` is invalid.")
         
     return

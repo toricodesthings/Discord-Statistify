@@ -1,5 +1,5 @@
 #Load required libraries
-import discord, json, os, inspect
+import discord, json, os, inspect, asyncio
 from botmodules import slash_commands
 from botmodules import commands as b_commands
 from wrapper import authorizer as auth
@@ -11,6 +11,7 @@ RED, GREEN, LIGHT_BLUE, RESET = "\033[91m", "\033[92m", "\033[94m", "\033[0m"
 
 #Establish Global Variable access_token
 access_token = ""
+TOKEN_REFRESH_TASK = None
 
 #-------------------------------------------------------------------------------------------------
 
@@ -28,7 +29,6 @@ def load_settings():
         "per_track_playcount_scraping": False,
         "syncslash_onstart": False
     } 
-    
     try:
         with open(file_path, "r") as file:
             settings_from_file = json.load(file)
@@ -43,15 +43,30 @@ def load_settings():
         print(f"{RED}Error decoding settings.json. Check the file format. Using default settings values{RESET}")
         return default
 
+async def refresh_token():
+    global access_token
+    while True:
+        try:
+            token, response_code, response_msg = await auth.request_token(spotify_cid, spotify_csecret)
+            if token != 0:
+                access_token = token
+                print(f"{GREEN}Spotify API token refreshed: {access_token}{RESET}")
+            else:
+                print(f"{RED}Failed to refresh Spotify API token. Code: {response_code}, Message: {response_msg}{RESET}")
+        except Exception as e:
+            print(f"{RED}Unexpected error during token refresh: {e}{RESET}")
+        
+        await asyncio.sleep(3590)
 
 #Report when Bot is Ready and Sync Slash Commands
 @bot.event
 async def on_ready():
+    global TOKEN_REFRESH_TASK
     print(f"{GREEN}{bot.user.name} has connected to Discord Successfully!{RESET}")
     
     # Start Token Request
     token, response_code, response_msg = await auth.request_token(spotify_cid, spotify_csecret)
-    if not token == 0:
+    if token != 0:
         global access_token
         access_token = token
         print(f"{GREEN}Spotify API access granted with token: {access_token}{RESET}")
@@ -59,6 +74,11 @@ async def on_ready():
         print(f"{RED}Spotify API access error with code: {response_code}\nError Message: {response_msg}")
         print(f"Bot has no access to Spotify API, please troubleshoot and restart!{RESET}")
         return
+    
+    if TOKEN_REFRESH_TASK is None or TOKEN_REFRESH_TASK.done():
+        TOKEN_REFRESH_TASK = asyncio.create_task(refresh_token())
+    else:
+        print(f"{LIGHT_BLUE}Token refresh task is already running.{RESET}")
     
     settings = load_settings()
     print(b_commands.sync_settings(settings))
@@ -69,7 +89,7 @@ async def on_ready():
         print(e)    
 
     if settings.get("syncslash_onstart", False) is True:
-    # Load and Sync Slash Commands Module and Pass access_token to Module
+        # Load and Sync Slash Commands Module and Pass access_token to Module
         try:
             synced = await slash_commands.automatic_sync(bot)
             print(f"{LIGHT_BLUE}Bot has automatically synced {len(synced)} command(s){RESET}")

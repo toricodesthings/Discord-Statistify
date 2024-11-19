@@ -24,6 +24,16 @@ async def setup_slash_commands(token, bot):
         author = interaction.user
         await b_commands.list(interaction, author, "artists")
         
+    @tree.command(name="settings_change", description="Open Settings Configuration Page")
+    async def settings_modify_command(interaction: discord.Interaction):    
+        author = interaction.user
+        await b_commands.settings(interaction, author, bot, "set")
+        
+    @tree.command(name="settings_view", description="View Current Bot Settings")
+    async def settings_read_command(interaction: discord.Interaction):    
+        author = interaction.user
+        await b_commands.settings(interaction, author, bot, "read")
+                
     @tree.command(name="get_artist_byid", description="Search and Retrieve Artist by URI code")
     @discord.app_commands.describe(id="Enter the Artist URI, URL, or Artist ID:")
     async def get_artist_byid_command(interaction: discord.Interaction, id: str):    
