@@ -70,8 +70,8 @@ Open the bot.py directly or use the included .bat if on Windows.
 + ~Add buttons to save in all get commands~
 + Search function for categories
 + ~Expand save command to tracks, artists, and playlists~
-+ Add Web Scraping for Monthly Listener
-+ Add Web Scraping for Tracks
++ ~Add Web Scraping for Monthly Listener~
++ ~Add Web Scraping for Tracks~
 + Clean up & Add Proper Commenting
 
 ## Lib Links 
@@ -81,7 +81,7 @@ Open the bot.py directly or use the included .bat if on Windows.
 * https://pypi.org/project/playwright/
 
 ## A Few Final Notes
-+ Bot is has majority of functions built but is unoptimized and is missing some documentation for now.
++ Bot has majority of functions built but is not yet noptimized and is missing some documentation for now.
 + Feel free to contribute any improvements or fork this repo
 + I will consider adding Spotify Audio Books data in the future, but it's not that relevant for me right now
 + A rebuild in JS of certain modules will happen to be used with my personal website
