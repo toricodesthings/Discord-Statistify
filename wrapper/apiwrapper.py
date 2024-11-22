@@ -155,3 +155,18 @@ async def request_album_info(album_id, token):
                 return data, response.status
             return None, response.status
         
+#API Req #10: Search Data
+async def search_info(search_input, data_type, token):
+    global web_endpoint
+    url = f"{web_endpoint}/v1/search?q={search_input}&type={data_type}"
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }            
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers = headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data, response.status
+            return None, response.status
+        

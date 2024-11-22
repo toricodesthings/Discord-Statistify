@@ -22,7 +22,7 @@ bot = discord.Client(intents=discord.Intents.all())
 
 def load_settings():
     root_folder = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(root_folder, "botmodules", "settings.json")
+    file_path = os.path.join(root_folder, "settings.json")
     
     default = {
         "monthly_listener_scraping": False,
@@ -102,26 +102,31 @@ async def on_ready():
         
 def gather_command_argument(command, cmd_func, message, author, bot, access_token, params):
     func_params = inspect.signature(cmd_func).parameters
-    
-    
+
     # Define potential arguments and filter based on function's required parameters
     possible_args = {
         'call_type': message,
         'author': author,
         'bot': bot,
         'token': access_token,
-
     }
     pass_args = {arg: possible_args[arg] for arg in func_params if arg in possible_args}
 
+    # Join remaining params as a single string if needed
     param_iter = iter(params)
     for param_name, param in func_params.items():
         if param_name not in pass_args and param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY):
             if param.default is not param.empty:
+                # If there's a default, assign the next parameter or use the default
                 pass_args[param_name] = next(param_iter, param.default)
             else:
+                # Assign the remaining parameters as a single string
                 try:
-                    pass_args[param_name] = next(param_iter)
+                    if param_name == "searchinput":  # Adjust to match the expected parameter name in the command
+                        pass_args[param_name] = " ".join(param_iter)
+                        break  # Remaining params have been captured
+                    else:
+                        pass_args[param_name] = next(param_iter)
                 except StopIteration:
                     raise ValueError(f"The command {command} is missing a required parameter. See help for more!")
 
@@ -154,6 +159,6 @@ async def on_message(message):
         except ValueError as ve:
             await message.reply(str(ve))
 
-                
-# Run the bot using your bot token
-bot.run(bot_token)
+# Run the bot using bot token located in .env
+if __name__ == "__main__":
+    bot.run(bot_token)

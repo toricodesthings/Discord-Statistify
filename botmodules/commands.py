@@ -58,14 +58,14 @@ async def generate_dropdown(author, call_type, saved_data, token, reply_func, da
         # Fetch function mapping based on data type
         fetch_function_mapping = {
             "artist": fetch_artists,
-            "track": fetch_track,
-            "playlist": fetch_playlist,
+            "track": fetch_tracks,
+            "playlist": fetch_playlists,
             "album": fetch_albums
         }
         
         fetch_function = fetch_function_mapping.get(data_type)
         
-        if fetch_function == fetch_track:
+        if fetch_function == fetch_tracks:
             await fetch_function(call_type, selected_uri, author, token, interaction.followup.send, False, True)
         else:
             await fetch_function(call_type, selected_uri, author, token, interaction.followup.send, True)
@@ -103,7 +103,7 @@ async def generate_track_selection(author, call_type, track_items, token, reply_
         selections.disabled = True
         view = View()
         view.add_item(selections)
-        await fetch_track(call_type, extract_id(selected_track_id, "Track"), author, token, reply_func, True)
+        await fetch_tracks(call_type, extract_id(selected_track_id, "Track"), author, token, reply_func, True)
     
         
     selections.callback = select_callback
@@ -228,9 +228,48 @@ async def generate_settings_buttons(author, call_type, settingsdata):
 
     return view
     
+#Generate list Next and Previous buttons if there's more than 6 elements:
+async def generate_list_buttons(author, call_type, allembeds):
+    
+    view = CustomView()
+
+    state = {"current_page": 0}
+    msg: None
+
+    async def prev_click(call_type):
+        if state["current_page"] > 0:
+            state["current_page"] -= 1
+            await update_embed(call_type)
+
+    async def next_click(call_type):
+        if state["current_page"] < len(allembeds) - 1:
+            state["current_page"] += 1
+            await update_embed(call_type)
+    
+    async def update_embed(call_type):
+        prev_button.disabled = state["current_page"] == 0
+        next_button.disabled = state["current_page"] == len(allembeds) - 1
+        
+        page = int(state["current_page"]) 
+        await view.msg.edit(embed=allembeds[page], view=view)
+        await call_type.response.defer()
+
+    prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
+    next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
+    prev_button.disabled = True
+    prev_button.callback = prev_click
+    next_button.callback = next_click
+
+    view.add_item(prev_button)
+    view.add_item(next_button)
+
+    return view
+
     
 #Generate Previous and Next Buttons for Get Command - Tracks Module
 async def generate_tracks_get_buttons(author, call_type, allembeds, reply_func, data_name, data_id, data_type):
+    
+    view = CustomView()
     
     if not len(allembeds) > 1:
         return
@@ -277,13 +316,96 @@ async def generate_tracks_get_buttons(author, call_type, allembeds, reply_func, 
     save_button = Button(label = "Save", style=discord.ButtonStyle.secondary)
     save_button.callback = save_button_click
     
-    view = CustomView()
     view.add_item(prev_button)
     view.add_item(save_button)
     view.add_item(next_button)
 
     return view
 
+async def generate_search_button(author, call_type, allembeds, reply_func, data_list, data_type):
+    """
+    Generates a paginated button interface with dynamic buttons for fetching info.
+
+    Args:
+    - author: The author of the message.
+    - call_type: The type of call for response handling.
+    - allembeds: The list of embeds to paginate.
+    - reply_func: The function to handle replies (e.g., ctx.reply).
+    - data_list: The list of items to generate buttons for.
+    - data_type: The type of data (e.g., 'artist', 'album').
+    - token: Authorization token for fetch functions.
+    - fetch_function_mapping: A dictionary mapping data types to their fetch functions.
+
+    Returns:
+    - view: The generated view with buttons.
+    """
+    state = {"current_page": 0}
+
+    async def prev_click(call_type):
+        if state["current_page"] > 0:
+            state["current_page"] -= 1
+            await update_embed(call_type)
+
+    async def next_click(call_type):
+        if state["current_page"] < len(allembeds) - 1:
+            state["current_page"] += 1
+            await update_embed(call_type)
+
+    async def save_button_click(call_type):
+        # Clear the view and add item buttons
+        view.clear_items()
+        current_page = state["current_page"]
+        start_index = current_page * 4
+        end_index = start_index + 4
+        current_items = data_list[start_index:end_index]
+
+        for name, spotify_id in current_items:
+            button = Button(label=name, style=discord.ButtonStyle.success)
+
+            async def save_callback(call_type, name=name, spotify_id=spotify_id, current_button=button):
+                statusmsg, saved = append_saved(author, spotify_id, name, data_type)
+                
+                if saved is True:
+                    current_button.disabled = True
+                    await update_embed(call_type)
+                    await reply_func(statusmsg)
+                    return
+
+                await reply_func(statusmsg)
+                current_button.disabled = True
+                await update_embed(call_type)
+                
+            button.callback = save_callback
+            view.add_item(button)
+
+        # Update the view
+        await call_type.response.edit_message(embed=allembeds[current_page], view=view)
+
+    async def update_embed(call_type):
+        prev_button.disabled = state["current_page"] == 0
+        next_button.disabled = state["current_page"] == len(allembeds) - 1
+        
+        page = state["current_page"]
+        await view.msg.edit(embed=allembeds[page], view=view)
+        await call_type.response.defer()
+
+    # Pagination buttons
+    prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
+    next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
+    save_button = Button(label="Save", style=discord.ButtonStyle.secondary)
+
+    prev_button.disabled = True
+    prev_button.callback = prev_click
+    next_button.callback = next_click
+    save_button.callback = save_button_click
+
+    # Initial view setup
+    view = CustomView()
+    view.add_item(prev_button)
+    view.add_item(save_button)
+    view.add_item(next_button)
+
+    return view
 #================DISCORD UI Generation================
 
 ##===============NON ASYNC Functions================
@@ -305,6 +427,8 @@ def get_reply_method(call_type):
     else:
         return call_type.response.send_message
 
+
+#================JSON ACCESS & MODIFICATION================
 #Loads presaved data from JSON
 def load_ps_data(data_type):
     root_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -389,7 +513,8 @@ def append_saved(author, data_id, data_name, data_type):
         return f"Successfully saved the {data_type_formatted} `{data_name}`", False
     except Exception as e:
         return f"Save command encountered an exception: {str(e)}", False
-
+    
+#================JSON ACCESS & MODIFICATION================
 
 #Extract ID from User Input
 def extract_id(u_input, input_type):
@@ -527,7 +652,7 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_sla
         else:
             await reply_func(bot_msg)
         
-async def fetch_track(call_type, track_uri, author, token, reply_func, dropdown_pathway=False, is_slash_withsaved=False):
+async def fetch_tracks(call_type, track_uri, author, token, reply_func, dropdown_pathway=False, is_slash_withsaved=False):
     data, response_code_t = await spotifyapi.request_track_info(track_uri, token)
     
     audio_data, response_code_taf = await spotifyapi.request_track_audiofeatures(track_uri, token)
@@ -609,7 +734,7 @@ async def fetch_track(call_type, track_uri, author, token, reply_func, dropdown_
         bot_msg = f"API Requests failed with status codes: {response_code_t} & {response_code_taf}"
     await reply_func(bot_msg)
     
-async def fetch_playlist(call_type, playlist_uri, author, token, reply_func, is_slash_withsaved=False):
+async def fetch_playlists(call_type, playlist_uri, author, token, reply_func, is_slash_withsaved=False):
 
     data, response_code = await spotifyapi.request_playlist_info(playlist_uri, token)
     
@@ -758,15 +883,18 @@ async def list(call_type, author, listtarget, *args):
     data_type = listtarget.lower().rstrip("s")
     reply_func = get_reply_method(call_type)
     
-    saved_list = fetch_saved_list(data_type)
+    saved_list = fetch_saved_list(listtarget)
     
     if_error = f"The parameter of the list function `{listtarget}` is invalid."
     
     # Check if saved_list is empty to confirm data_type validity
     if saved_list:
-        listembed = embedder.format_list(author, data_type, saved_list)
-        await reply_func(embed=listembed)
-
+        listembeds = embedder.format_list(author, data_type, saved_list)
+        if len(listembeds) > 1:
+            view = generate_list_buttons(author, call_type, listembeds)
+        else:
+            view = None
+        await reply_func(embed=listembeds[0], view = view)
     else:
         await reply_func(if_error)
     
@@ -779,8 +907,8 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
     #ALl Search Targets
     search_mappings = {
         "artists": ("Artist", fetch_artists),
-        "tracks": ("Track", fetch_track),
-        "playlists": ("Playlist", fetch_playlist),
+        "tracks": ("Track", fetch_tracks),
+        "playlists": ("Playlist", fetch_playlists),
         "albums": ("Album", fetch_albums),
         "users": ("User", fetch_users),
     }
@@ -807,7 +935,7 @@ async def get(call_type, author, bot, searchtarget, u_input, token, *args):
             return
 
         # Fetch with the determined function
-        if fetch_function == fetch_track:
+        if fetch_function == fetch_tracks:
             await fetch_function(call_type, uri, author, token, reply_func, False)
         else:
             await fetch_function(call_type, uri, author, token, reply_func)
@@ -839,7 +967,7 @@ async def get_saved_module(call_type, reply_func, author, bot, token, data_type)
         list_embed = embedder.format_list(author, data_type.rstrip("s"), saved_data_list)
         await reply_func(
             f"Please specify (by number) which of the saved {data_type} you want to retrieve:",
-            embed=list_embed
+            embed=list_embed[0]
         )
         
         # Await user input
@@ -901,27 +1029,81 @@ async def save(call_type, author, savetarget, u_input, token, *args):
 
     await reply_func(f"The parameter of the save command `{savetarget}` is invalid.")
 
-async def search(call_type, author, bot, searchtarget, u_input, token, *args):
+def extract_items_for_buttons(data, data_type):
+
+    items = data[data_type]["items"]
+    
+    if data_type == "artists":
+        # Extract Artist Name and ID
+        return [(artist["name"], artist["id"]) for artist in items]
+    
+    elif data_type == "albums":
+        # Extract Album Name and ID
+        return [(album["name"], album["id"]) for album in items]
+    
+    elif data_type == "playlists":
+        # Extract Playlist Name and ID
+        return [(playlist["name"], playlist["id"]) for playlist in items]
+    
+    elif data_type == "tracks":
+        # Extract Track Name and ID
+        return [(track["name"], track["id"]) for track in items]
+    
+#TEMP
+async def search_data(call_type, author, bot, searchinput, data_type, token, reply_func, *args):
+    # Define a mapping of data types to Spotify API search types
+    bot_msg = None
+    
+    search_types = {
+        "artists": "artist",
+        "albums": "album",
+        "playlists": "playlist",
+        "tracks": "track"
+    }
+
+    # Fetch data from Spotify API
+    data, response_code = await spotifyapi.search_info(searchinput, search_types[data_type], token)
+
+    if data and response_code == 200:
+        # Format the data into embeds
+        allembeds = embedder.format_search_data(author, searchinput, data, data_type)
+        
+        data_list = extract_items_for_buttons(data, data_type)
+        
+        view = await generate_search_button(author, call_type, allembeds, reply_func, data_list, data_type)
+        
+        # Send the first embed as a response
+        if isinstance(call_type, discord.Interaction):
+            await reply_func(embed=allembeds[0], view = view)
+            msg = await call_type.original_response()
+            view.set_message(msg)
+        else:
+            msg = await reply_func(embed=allembeds[0], view = view)
+            view.set_message(msg)
+        
+        return
+    
+    else:
+        bot_msg = f"API Requests failed with status codes: {response_code}"
+    await reply_func(bot_msg)
+    
+async def search(call_type, author, bot, searchtarget, searchinput, token, *args):
     
     reply_func = get_reply_method(call_type)
     data_type = searchtarget.lower()
     
-    search_mappings = {
-        "artists": ("Artist", fetch_artists),
-        "tracks": ("Track", fetch_track),
-        "playlists": ("Playlist", fetch_playlist),
-        "albums": ("Album", fetch_albums),
-    }
+    possible_search = ["artists", "albums", "playlists", "tracks"]
 
     searchtarget = searchtarget.lower()
     
-    if searchtarget in search_mappings:
-        uri_type, fetch_function = search_mappings[searchtarget]
+    if searchtarget in possible_search:
+        await search_data(call_type, author, bot, searchinput, data_type, token, reply_func, *args)
+        return
         
     await reply_func(f"The parameter of the save command `{searchtarget}` is invalid.")
     return
     
-#temps, move upwards and implement later
+#==========SETTINGS JSON ACCESS============
 def load_settings():
     root_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     file_path = os.path.join(root_folder, f'settings.json')
@@ -975,3 +1157,5 @@ async def settings(call_type, author, bot, setting_accesstype, *args):
         await reply_func(f"The parameter of the settings command `{setting_accesstype}` is invalid.")
         
     return
+
+#==========SETTINGS JSON ACCESS============
