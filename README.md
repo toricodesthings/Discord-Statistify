@@ -68,11 +68,11 @@ Open the bot.py directly or use the included .bat if on Windows.
 + ~~Expand get command to user~~
 + ~~Expand get command to albums~~
 + ~Add buttons to save in all get commands~
-+ Search function for categories
++ ~Search function for categories~
 + ~Expand save command to tracks, artists, and playlists~
 + ~Add Web Scraping for Monthly Listener~
 + ~Add Web Scraping for Tracks~
-+ Clean up & Add Proper Commenting
++ Clean up & Documentation
 
 ## Lib Links 
 * https://pypi.org/project/aiohttp/
@@ -81,11 +81,11 @@ Open the bot.py directly or use the included .bat if on Windows.
 * https://pypi.org/project/playwright/
 
 ## A Few Final Notes
-+ Bot has majority of functions built but is not yet noptimized and is missing some documentation for now.
++ Bot has majority of functions built but is not yet optimized and is missing some documentation for now.
 + Feel free to contribute any improvements or fork this repo
 + I will consider adding Spotify Audio Books data in the future, but it's not that relevant for me right now
 + A rebuild in JS of certain modules will happen to be used with my personal website
-+ This bot will have the ability to scrape for the two public but relevant data using playwright, playcount and monthly listener. However, this is for educational purposes only and the setting is off by default (and only the Official Spotify API data will be used)! The scraper is also NOT resistant to website updates and might break but I will try to maintain it. When Spotify's Public API adds these data, I will update the code to use the API instead. Finally, do note that turning scraping On will slow down fetching commands considerably as it takes time to load these dynamically-loaded information in a simulated browser.
++ This bot will have the ability to scrape for two public but relevant data using playwright, playcount and monthly listener. However, this is for educational purposes only and the setting is off by default (where only the Official Spotify API data will be used)! The scraper is also NOT resistant to website updates and might break but I will try to maintain it. When Spotify's Public API adds these data, I will update the code to use the API instead. Finally, do note that turning scraping On will slow down the fetching commands considerably as it takes time to retrieve these dynamically-loaded information in a headless browser.
 
 ## Attribution
 This project uses
