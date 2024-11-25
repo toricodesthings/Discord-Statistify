@@ -3,49 +3,74 @@ from wrapper import apiwrapper as spotifyapi
 
 #Misc Command - Change Track Duration from ms to s
 def format_track_duration(ms):
-    minutes = ms // 60000
-    seconds = (ms % 60000) // 1000
+    minutes, seconds = ms // 60000, (ms % 60000) // 1000
     return f"{minutes}:{seconds:02}"
 
-def format_list(author, list_data_type, saved_list):
+def format_list(author, list_data_type, saved_list, chunk_size=6):
+    """
+    Format a list into a series of Discord embeds, paginated for readability.
+    
+    Args:
+        author (discord.User): The author who request the list command
+        list_data_type (str): The type of data being listed (e.g., "song", "video").
+        saved_list (list[dict]): The list of saved items to be formatted.
+        chunk_size (int): The number of items per embed page. Default is 6.
+        
+    Returns:
+        list[discord.Embed]: A list of embeds formatted for Discord.
+    """
     embeds = []
-    avatar_url = author.avatar.url
-    chunk_size = 6  # Maximum number of items per page
+    avatar_url = author.avatar.url  # Cache avatar URL
 
-    # Split the saved list into chunks of `items_per_page`
-    for i in range(0, len(saved_list), chunk_size):
-        chunk = saved_list[i:i + chunk_size]
+    # Split the saved list into chunks for pagination
+    for i, chunk in enumerate(
+        (saved_list[j:j + chunk_size] for j in range(0, len(saved_list), chunk_size)), start=1
+    ):
         embed = discord.Embed(
             title=f"Saved {list_data_type}s",
-            description=f"List of {author.display_name}'s presaved {list_data_type} (use help find out how to save {list_data_type})",
+            description=(
+                f"List of {author.display_name}'s presaved {list_data_type}s. "
+                f"(Use the help command to learn how to save {list_data_type}s.)"
+            ),
             color=discord.Color.green(),
         )
 
-        for index, a in enumerate(chunk, start=i + 1):
+        # Add fields for each item in the current chunk
+        for index, item in enumerate(chunk, start=(i - 1) * chunk_size + 1):
             embed.add_field(
-                name=f"`{index}` - {a[list_data_type]}",
-                value=f"{list_data_type.capitalize()} ID: `{a[f'{list_data_type}_url']}`",
+                name=f"`{index}` - {item[list_data_type]}",
+                value=f"{list_data_type.capitalize()} ID: `{item[f'{list_data_type}_url']}`",
                 inline=False
             )
 
+        # Add footer information
         embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
         embeds.append(embed)
 
     return embeds
 
-
 #Create Embed for Artist (& And Artist Top tracks)
 def format_get_artist(author, response, monthly_listener=None, errormsg=None):
+    """
+    Formats artist information into a Discord embed for display.
 
-    
+    Args:
+        author (discord.User): The author whose requesting the artist information.
+        response (dict): Artist information from the Spotify API.
+        monthly_listener (int, optional): The artist's monthly listeners. Default is None.
+        errormsg (str, optional): Error message for missing data. Default is None.
+
+    Returns:
+        discord.Embed: A formatted Discord embed with the artist's details.
+    """
     artist_name = response['name']
+    
+    # Generate description with centered title and bars
     description = f"[Artist Information for {artist_name}]"
-    remaining_space = 56 - len(description)
-    
-    if remaining_space > 0:
-        side_bars = "=" * (remaining_space // 2)
-        description = f"{side_bars}{description}{side_bars}"
-    
+    side_bars = "=" * max((56 - len(description)) // 2, 0)
+    description = f"{side_bars}{description}{side_bars}"
+
+    # Create the embed
     embed = discord.Embed(
         title=artist_name,
         description=description,
@@ -54,73 +79,87 @@ def format_get_artist(author, response, monthly_listener=None, errormsg=None):
     embed.set_thumbnail(url=response['images'][0]['url'])
     embed.add_field(name="Spotify URL", value=response['external_urls']['spotify'], inline=False)
     embed.add_field(name="Followers", value=f"`{int(response['followers']['total']):,}`", inline=True)
+    
     if monthly_listener:
         embed.add_field(name="Monthly Listeners", value=f"`{int(monthly_listener):,}`", inline=True)
-
+    
     embed.add_field(name="Popularity Index", value=f"`{response['popularity']}`", inline=True)
+
+    # Add genres as a single field, separated by commas
     if response['genres']:
-        embed.add_field(name="Genres", value="".join(f"`{genre}` " for genre in response['genres']).strip(), inline=True)
+        genres = ", ".join(f"`{genre}`" for genre in response['genres'])
+        embed.add_field(name="Genres", value=genres, inline=True)
+    
     embed.add_field(name="Full Spotify URI", value=f"`{response['uri']}`", inline=False)
 
+    # Include error message, if any
     if errormsg:
-        embed.add_field(name="Notes:", value=f"Could not retrieve monthly listener data due to an error:\n{errormsg}", inline=False)
+        embed.add_field(name="Notes", value=f"Could not retrieve monthly listener data due to an error:\n{errormsg}", inline=False)
 
-    # Direct footer assignment
+    # Set footer with requestor's information
     embed.set_footer(text=f"Requested by {author.display_name}", icon_url=author.avatar.url)
 
     return embed
 
-async def format_track_embed_helper_albums(albumid, token):
-    album_tracks_data, response_code = await spotifyapi.request_album_tracklist(albumid, token)
-    if album_tracks_data and response_code == 200:
-        return album_tracks_data, True
-    else:
-        return None, False
-        
+async def format_track_embed_helper_albums(album_id, token):
+    """
+    Helper function to retrieve album tracklist from Spotify API.
+
+    Args:
+        album_id (str): The ID of the album.
+        token (str): Authorization token for Spotify API.
+
+    Returns:
+        tuple: Album tracks data and success flag.
+    """
+    album_tracks_data, response_code = await spotifyapi.request_album_tracklist(album_id, token)
+    return (album_tracks_data, True) if album_tracks_data and response_code == 200 else (None, False)
+
 async def format_track_embed(author, response, token):
+    """
+    Format track details into Discord embeds and track list.
+
+    Args:
+        author (discord.User): The user requesting the track details.
+        response (dict): The response data containing track information.
+        token (str): Authorization token for Spotify API.
+
+    Returns:
+        tuple: List of Discord embeds and list of tracks with their URIs.
+    """
     embeds = []
     tracks_list = []
-    author_avatar_url = author.avatar.url 
+    author_avatar_url = author.avatar.url
 
     for track in response['tracks']:
         album = track['album']
-        
-        #Retrieve essential track and album details
         album_name = album['name']
         track_name = track['name']
         track_url = track['external_urls']['spotify']
         album_uri = album['uri']
         track_uri = track['uri']
         popularity = track.get('popularity', 'N/A')
-        
-        tracks_list.append((track_name, track_uri))
+        duration = format_track_duration(track['duration_ms'])
         artist_names = ", ".join(artist['name'] for artist in track['artists'])
 
-        # Conditionally display track name only if it differs from album name
-        display_track_name = "" if album_name == track_name else track_name
+        tracks_list.append((track_name, track_uri))
 
-        # Format track duration once
-        duration = format_track_duration(track['duration_ms'])
-
-        # Retrieve album tracks if applicable
+        # Determine the track list or fallback display
         if album['total_tracks'] > 1:
             album_tracks, response_succeed = await format_track_embed_helper_albums(album['id'], token)
-            
-            if response_succeed and album_tracks:
-                # Generate padded track listing only if album tracks were successfully retrieved
-                track_list = "\n".join(f"{str(t['track_number']).rjust(2, '0')}. {t['name']}" for t in album_tracks['items'])
-            else:
-                track_list = "Could not retrieve track list."
+            track_list = (
+                "\n".join(f"{str(t['track_number']).rjust(2, '0')}. {t['name']}" for t in album_tracks['items'])
+                if response_succeed and album_tracks
+                else "Could not retrieve track list."
+            )
         else:
-            track_list = display_track_name
+            track_list = track_name if album_name != track_name else ""
 
-        # Initialize embed with title and color
+        # Create and populate the embed
         embed = discord.Embed(
-            title=f"{album_name} (Album)" if track_list != display_track_name else album_name,
+            title=f"{album_name} (Album)" if track_list else album_name,
             color=discord.Color.blue()
         )
-
-        # Set thumbnail and add fields directly
         embed.set_thumbnail(url=album['images'][0]['url'])
         embed.add_field(name="Spotify URL", value=track_url, inline=False)
         embed.add_field(name="Artist(s)", value=f"`{artist_names}`", inline=False)
@@ -131,28 +170,41 @@ async def format_track_embed(author, response, token):
         embed.add_field(name="Release Date", value=f"`{album['release_date']}`", inline=True)
         embed.add_field(name="Spotify Album URI", value=f"`{album_uri}`", inline=False)
         embed.add_field(name="Spotify Track URI", value=f"`{track_uri}`", inline=False)
-
-        # Set footer once, using pre-accessed avatar URL
         embed.set_footer(text=f"Requested by {author.display_name}", icon_url=author_avatar_url)
-        
+
         embeds.append(embed)
 
     return embeds, tracks_list
 
+
 def format_track_audiofeatures(author, response, audiofeatures_response, allembeds):
-    album = response['album']  # Access album details once
+    """
+    Formats the audio features of a track into a Discord embed.
+
+    Args:
+        author (discord.User): The user requesting the audio features.
+        response (dict): The track information from the Spotify API.
+        audiofeatures_response (dict): Audio features data from Spotify API.
+        allembeds (list): A list to store the created embeds.
+
+    Returns:
+        list: Updated list of embeds.
+    """
+    album = response['album']
     album_name = album['name']
     album_type = album['album_type']
     track_name = response['name']
-    
-    # Audio Features - Calculated once with rounding
-    acousticness = round(audiofeatures_response['acousticness'] * 100, 2)
-    danceability = round(audiofeatures_response['danceability'] * 100, 2)
-    energy = round(audiofeatures_response['energy'] * 100, 2)
-    instrumentalness = round(audiofeatures_response['instrumentalness'] * 100, 2)
-    liveness = round(audiofeatures_response['liveness'] * 100, 2)
-    speechiness = round(audiofeatures_response['speechiness'] * 100, 2)
-    valence_positiveness = round(audiofeatures_response['valence'] * 100, 2)
+
+    # Calculate audio features (pre-rounding for efficiency)
+    audio_features = {
+        "Acousticness": round(audiofeatures_response['acousticness'] * 100, 2),
+        "Danceability": round(audiofeatures_response['danceability'] * 100, 2),
+        "Energy": round(audiofeatures_response['energy'] * 100, 2),
+        "Instrumentalness": round(audiofeatures_response['instrumentalness'] * 100, 2),
+        "Liveness": round(audiofeatures_response['liveness'] * 100, 2),
+        "Speechiness": round(audiofeatures_response['speechiness'] * 100, 2),
+        "Valence/Positivity": round(audiofeatures_response['valence'] * 100, 2),
+    }
     loudness_level = round(audiofeatures_response['loudness'], 2)
     track_tempo = round(audiofeatures_response['tempo'])
 
@@ -162,49 +214,43 @@ def format_track_audiofeatures(author, response, audiofeatures_response, allembe
     track_mode = "Major" if audiofeatures_response['mode'] == 1 else "Minor"
     time_signature = audiofeatures_response['time_signature']
 
-    # Generate notes based on thresholds
+    # Generate notes
     notes = [
-        "Track is likely an acoustic version" if acousticness > 50 else "Track is not an acoustic track",
-        "Track is likely an instrumental/instrumental version" if instrumentalness > 50 else "Track is likely to have lyrics",
-        "Track is likely played live" if liveness > 80 else "Track is likely recorded in a studio",
-        "Track is likely pure spoken words" if speechiness > 66 else "Track includes musical content",
+        "Track is likely an acoustic version" if audio_features["Acousticness"] > 50 else "Track is not an acoustic track",
+        "Track is likely an instrumental/instrumental version" if audio_features["Instrumentalness"] > 50 else "Track is likely to have lyrics",
+        "Track is likely played live" if audio_features["Liveness"] > 80 else "Track is likely recorded in a studio",
+        "Track is likely pure spoken words" if audio_features["Speechiness"] > 66 else "Track includes musical content",
     ]
 
-    # Embed creation
+    # Create embed
     embed = discord.Embed(
         title=f"{track_name}'s Audio Analysis",
         description=f"From: {album_name} - `{album_type.capitalize()}`",
         color=discord.Color.pink()
     )
+    embed.set_thumbnail(url=album['images'][0]['url'])
+    embed.set_footer(text=f"Requested by {author.display_name}", icon_url=author.avatar.url)
 
+    # Add primary details
     embed.add_field(name="Loudness Level", value=f"`{loudness_level} LUFS`", inline=True)
     embed.add_field(name="Track Tempo", value=f"`{track_tempo} BPM`", inline=True)
     embed.add_field(name="Time Signature", value=f"`{time_signature}/4`", inline=True)
     embed.add_field(name="Key Signature", value=f"`{track_key} {track_mode}`", inline=True)
 
-    separator = "=" * 35  
-    embed.add_field(name=separator, value="\u200b", inline=False)  
+    # Add separator
+    separator = "=" * 35
+    embed.add_field(name=separator, value="\u200b", inline=False)
 
-    audio_features = {
-        "Acousticness": acousticness,
-        "Danceability": danceability,
-        "Energy": energy,
-        "Instrumentalness": instrumentalness,
-        "Liveness": liveness,
-        "Speechiness": speechiness,
-        "Valence/Positivity": valence_positiveness,
-    }
+    # Add audio feature fields
     for feature, value in audio_features.items():
         embed.add_field(name=feature, value=f"`{value}%`", inline=True)
 
-    # Adding notes
+    # Add notes
     embed.add_field(name="Notes", value="\n".join(notes), inline=False)
 
-    # Thumbnail and footer
-    embed.set_thumbnail(url=album['images'][0]['url'])
-    embed.set_footer(text=f"Requested by {author.display_name}", icon_url=author.avatar.url)
-
+    # Add embed to the list
     allembeds.append(embed)
+
     return allembeds
 
 def format_get_track(author, response, audiofeatures_response, playcount=None, errormsg=None):
@@ -431,145 +477,94 @@ def format_settings(author, data):
     
     return embed
     
-def format_search_data(author, searchinput, data, data_type):
+def format_search_data(author, search_input, data, data_type):
+    """
+    Formats search results into Discord embeds for artists, albums, playlists, or tracks.
+
+    Args:
+        author (discord.User): The user requesting the search.
+        search_input (str): The user's search input.
+        data (dict): The search results returned from Spotify API.
+        data_type (str): The type of data being searched (e.g., 'artists', 'albums', 'playlists', 'tracks').
+
+    Returns:
+        list[discord.Embed]: A list of embeds containing the search results.
+    """
     embeds = []
     chunk_size = 4
-    
-    if data_type == "artists":
-        artists = data["artists"]["items"]
-        pages = [artists[i:i + chunk_size] for i in range(0, len(artists), chunk_size)]
+    avatar_url = getattr(author.avatar, 'url', None)
 
-        for page_index, page in enumerate(pages, start=1):
-            embed = discord.Embed(
-                title=f"Artist Search Results - Page {page_index}",
-                description=f"Artists that match `{searchinput}` are listed below:",
-                color=discord.Color.pink()
-            )
-            
-            for artist in page:
-                name = artist["name"]
-                followers = artist["followers"]["total"]
-                popularity = artist["popularity"]
-                spotify_id = artist["id"]
-                profile_url = artist["external_urls"]["spotify"]
+    # Define data extraction and formatting functions for each data type
+    def format_artist(artist):
+        return {
+            "name": f"__{artist['name']}__" if artist["name"].lower() == search_input.lower() else artist["name"],
+            "value": (
+                f"Followers: `{artist['followers']['total']}`\n"
+                f"Popularity: `{artist['popularity']}`\n"
+                f"Spotify ID: `{artist['id']}`\n"
+                f"[Profile Link]({artist['external_urls']['spotify']})"
+            ),
+        }
 
-                embed.add_field(
-                    name=f"__{name}__" if name == searchinput else name,
-                    value=(
-                        f"Followers: `{followers}`\n"
-                        f"Popularity: `{popularity}`\n"
-                        f"Spotify ID: `{spotify_id}`\n"
-                        f"[Profile Link]({profile_url})"
-                    ),
-                    inline=False
-                )
-            
-            avatar_url = author.avatar.url if author.avatar else None
-            embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
-            embeds.append(embed)
-            
-    elif data_type == "albums":
-        albums = data["items"]
-        pages = [albums[i:i + chunk_size] for i in range(0, len(albums), chunk_size)]
+    def format_album(album):
+        artists = ", ".join(artist["name"] for artist in album["artists"])
+        return {
+            "name": f"{album['name']} ({album['album_type'].capitalize()})",
+            "value": (
+                f"**Artists:** {artists}\n"
+                f"**Tracks:** `{album['total_tracks']}`\n"
+                f"**Release Date:** `{album['release_date']}`\n"
+                f"**Spotify ID:** `{album['id']}`\n"
+                f"[Album Link]({album['external_urls']['spotify']})"
+            ),
+        }
 
-        for page_index, page in enumerate(pages, start=1):
-            embed = discord.Embed(
-                title=f"Album Search Results - Page {page_index}",
-                description="Here are the albums matching your search.",
-                color=discord.Color.purple()
-            )
-            
-            for album in page:
-                album_name = album["name"]
-                album_type = album["album_type"].capitalize()
-                total_tracks = album["total_tracks"]
-                release_date = album["release_date"]
-                spotify_id = album["id"]
-                profile_url = album["external_urls"]["spotify"]
-                artists = ", ".join(artist["name"] for artist in album["artists"])
+    def format_playlist(playlist):
+        return {
+            "name": playlist["name"],
+            "value": (
+                f"**Collaborative:** `{playlist['collaborative']}`\n"
+                f"**Created By:** `{playlist['owner']['display_name']}`\n"
+                f"**Total Songs:** `{playlist['tracks']['total']}`\n"
+                f"**Spotify ID:** `{playlist['id']}`\n"
+                f"[Playlist Link]({playlist['external_urls']['spotify']})"
+            ),
+        }
 
-                embed.add_field(
-                    name=f"{album_name} ({album_type})",
-                    value=(
-                        f"**Artists:** {artists}\n"
-                        f"**Tracks:** `{total_tracks}`\n"
-                        f"**Release Date:** `{release_date}`\n"
-                        f"**Spotify ID:** `{spotify_id}`\n"
-                        f"[Album Link]({profile_url})"
-                    ),
-                    inline=False
-                )
-            
-            avatar_url = author.avatar.url if author.avatar else None
-            embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
-            embeds.append(embed)
-    elif data_type == "playlists":
-        playlists = data["playlists"]["items"]
-        pages = [playlists[i:i + chunk_size] for i in range(0, len(playlists), chunk_size)]
+    def format_track(track):
+        artists = ", ".join(artist["name"] for artist in track["artists"])
+        return {
+            "name": f"{track['name']} by {artists}",
+            "value": (
+                f"**Popularity:** `{track['popularity']}`\n"
+                f"**Spotify ID:** `{track['id']}`\n"
+                f"[Track Link]({track['external_urls']['spotify']})"
+            ),
+        }
 
-        for page_index, page in enumerate(pages, start=1):
-            embed = discord.Embed(
-                title=f"Playlist Search Results - Page {page_index}",
-                description="Here are the playlists matching your search.",
-                color=discord.Color.orange()
-            )
-            
-            for playlist in page:
-                name = playlist["name"]
-                collaborative = playlist["collaborative"]
-                owner_name = playlist["owner"]["display_name"]
-                total_tracks = playlist["tracks"]["total"]
-                spotify_id = playlist["id"]
-                profile_url = playlist["external_urls"]["spotify"]
+    # Mapping of data type to appropriate formatting function and data key
+    data_type_mapping = {
+        "artists": ("artists", "Artist Search Results", discord.Color.pink(), format_artist),
+        "albums": ("items", "Album Search Results", discord.Color.purple(), format_album),
+        "playlists": ("playlists", "Playlist Search Results", discord.Color.orange(), format_playlist),
+        "tracks": ("tracks", "Track Search Results", discord.Color.green(), format_track),
+    }
 
-                embed.add_field(
-                    name=f"{name}",
-                    value=(
-                        f"**Collaborative:** `{collaborative}`\n"
-                        f"**Created By:** `{owner_name}`\n"
-                        f"**Total Songs:** `{total_tracks}`\n"
-                        f"**Spotify ID:** `{spotify_id}`\n"
-                        f"[Playlist Link]({profile_url})"
-                    ),
-                    inline=False
-                )
-            
-            avatar_url = author.avatar.url if author.avatar else None
-            embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
-            embeds.append(embed)
-            
-    elif data_type == "tracks":
-        tracks = data["tracks"]["items"]
-        pages = [tracks[i:i + chunk_size] for i in range(0, len(tracks), chunk_size)]
+    data_key, title, color, formatter = data_type_mapping[data_type]
+    items = data[data_key]["items"] if data_type == "artists" else data[data_key]
+    pages = [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
 
-        for page_index, page in enumerate(pages, start=1):
-            embed = discord.Embed(
-                title=f"Track Search Results - Page {page_index}",
-                description="Here are the tracks matching your search.",
-                color=discord.Color.green()
-            )
-            
-            for track in page:
-                track_name = track["name"]
-                artists = ", ".join(artist["name"] for artist in track["artists"])
-                popularity = track["popularity"]
-                spotify_id = track["id"]
-                track_url = track["external_urls"]["spotify"]
+    for page_index, page in enumerate(pages, start=1):
+        embed = discord.Embed(
+            title=f"{title} - Page {page_index}",
+            description=f"Results matching `{search_input}`:" if data_type != "albums" else "Here are the albums matching your search.",
+            color=color,
+        )
+        for item in page:
+            field = formatter(item)
+            embed.add_field(name=field["name"], value=field["value"], inline=False)
 
-                embed.add_field(
-                    name=f"{track_name} by {artists}",
-                    value=(
-                        f"**Popularity:** `{popularity}`\n"
-                        f"**Spotify ID:** `{spotify_id}`\n"
-                        f"[Track Link]({track_url})"
-                    ),
-                    inline=False
-                )
-            
-            avatar_url = author.avatar.url if author.avatar else None
-            embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
-            embeds.append(embed)
-        
+        embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
+        embeds.append(embed)
+
     return embeds
-
-

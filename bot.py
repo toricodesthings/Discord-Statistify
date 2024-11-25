@@ -44,6 +44,9 @@ def load_settings():
         return default
 
 async def refresh_token():
+    """
+    Periodically refresh the Spotify API access token.
+    """
     global access_token
     while True:
         try:
@@ -61,6 +64,9 @@ async def refresh_token():
 #Report when Bot is Ready and Sync Slash Commands
 @bot.event
 async def on_ready():
+    """
+    Establishes required functions and request for Spotify API access token when bot finishes connecting to Discord
+    """
     global TOKEN_REFRESH_TASK
     print(f"{GREEN}{bot.user.name} has connected to Discord Successfully!{RESET}")
     
@@ -101,62 +107,103 @@ async def on_ready():
     print(f"{GREEN}Bot is Ready{RESET}")
         
 def gather_command_argument(command, cmd_func, message, author, bot, access_token, params):
+    """
+    Gathers and maps arguments to the parameters of a command function.
+
+    Args:
+        command (str): The name of the command being executed.
+        cmd_func (function): The function to execute for the command.
+        message (discord.Message): The message object containing the command.
+        author (discord.User): The user who issued the command.
+        bot (discord.Client): The bot instance.
+        access_token (str): The access token for authorization.
+        params (list): The additional parameters passed with the command.
+
+    Returns:
+        dict: A dictionary of arguments to pass to the command function.
+    
+    Raises:
+        ValueError: If a required parameter is missing and no default value is provided.
+    """
+    # Get the parameters of the command function
     func_params = inspect.signature(cmd_func).parameters
 
-    # Define potential arguments and filter based on function's required parameters
+    # Define potential arguments
     possible_args = {
-        'call_type': message,
+        'call_type': message, 
         'author': author,
         'bot': bot,
         'token': access_token,
     }
+
+    # Filter arguments to match the command function's signature
     pass_args = {arg: possible_args[arg] for arg in func_params if arg in possible_args}
 
-    # Join remaining params as a single string if needed
+    # Iterate over remaining params
     param_iter = iter(params)
     for param_name, param in func_params.items():
         if param_name not in pass_args and param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY):
             if param.default is not param.empty:
-                # If there's a default, assign the next parameter or use the default
+                # Assign default if no parameter is available
                 pass_args[param_name] = next(param_iter, param.default)
             else:
-                # Assign the remaining parameters as a single string
-                try:
-                    if param_name == "searchinput":  # Adjust to match the expected parameter name in the command
-                        pass_args[param_name] = " ".join(param_iter)
-                        break  # Remaining params have been captured
-                    else:
+                # Assign remaining parameters as a single string for specific cases
+                if param_name == "searchinput":
+                    pass_args[param_name] = " ".join(param_iter)
+                    break  # Remaining params captured
+                else:
+                    try:
                         pass_args[param_name] = next(param_iter)
-                except StopIteration:
-                    raise ValueError(f"The command {command} is missing a required parameter. See help for more!")
+                    except StopIteration:
+                        raise ValueError(f"The command '{command}' is missing a required parameter. See help for details.")
 
     return pass_args
 
 @bot.event
 async def on_message(message):
+    """
+    Handles incoming messages and processes commands prefixed with 's!'.
+
+    Args:
+        message (discord.Message): The message object from Discord.
+    """
     # Ignore messages from bots
     if message.author.bot:
         return
 
-    ctx = message.content
-    # Command Handling
+    # Extract the message content
+    ctx = message.content.strip()
+    
+    # Handle commands starting with 's!'
     if ctx.lower().startswith("s!"):
         if len(ctx) < 3:
-            await message.reply("Hello there. If you need help, run /help or s!help")
+            await message.reply("Hello there. If you need help, run `/help` or `s!help`.")
             return
 
+        # Identify the command and parameters
         command, params = b_commands.identify_commands(ctx)
         cmd_func = globals().get(command) or getattr(b_commands, command, None)
 
+        # Validate the command
         if not (cmd_func and callable(cmd_func)):
             await message.reply(f"The command you entered '{command}' is invalid.")
             return
 
         try:
-            # Gather arguments and call the command
-            pass_args = gather_command_argument(command, cmd_func, message, message.author, bot, access_token, params)
+            # Prepare and pass arguments to the command function
+            pass_args = gather_command_argument(
+                command=command,
+                cmd_func=cmd_func,
+                message=message,
+                author=message.author,
+                bot=bot,
+                token=access_token,
+                params=params
+            )
             await cmd_func(**pass_args)
+
         except ValueError as ve:
+            # Handle ValueErrors raised by command execution
             await message.reply(str(ve))
 
 # Run the bot using bot token located in .env
