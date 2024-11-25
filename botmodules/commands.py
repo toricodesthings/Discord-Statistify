@@ -5,7 +5,6 @@ from botmodules import response_formatter as embedder
 from urllib.parse import urlparse
 from discord.ui import View, Select, Button
 
-
 #================Bot Command Default Globals================
 #Global settings for fetch command
 SETTINGS = {
@@ -848,7 +847,7 @@ async def help(call_type, author):
         description=" V All available commands and parameters are listed below V",
         color=discord.Color.green() 
     )
-    embed.add_field(name="Main Artist Commands:", value=f"""
+    embed.add_field(name="Main Commands:", value=f"""
 =============================================================
 **`List Artists`** lists all artists saved by user
 Example: `s!list artists`
@@ -861,16 +860,24 @@ Example: `s!list artists`
 
 By ID Example: `s!get artists [Spotify URL, URI or Direct ID]`
 By Saved: `s!get artists saved` (Follow the prompt after)
-
-By Slash Command: `Type / and follow the prompt`
 =============================================================
 **`Save Artists`** saves an artist by `Spotify ID`
+**`Save Tracks`** saves an artist by `Spotify ID`
+**`Save Playlists`** saves an artist by `Spotify ID`
+**`Save Albums`** saves an artist by `Spotify ID`
+
 Example: `s!save artists` [Spotify URL, URI or Direct ID]
 =============================================================
+**`Search Artists`** lists all artists saved by user
+Example: `s!search artists Shep`
+=============================================================
+
+All of these commands has a Slash Command variant: `Type / and follow the prompt`
                     """, inline=False)
     embed.add_field(name="Misc Commands", value=f"""
 \n
 **`Ping`** pings the bot
+**`Settings`** opens the bot settings menu
 **`Help`** requests the help menu
                     """, inline=False)
 
@@ -1127,8 +1134,7 @@ def modify_setting(new_setting):
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Error saving {e}")
     
-    
-async def settings(call_type, author, bot, setting_accesstype, *args):
+async def settings(call_type, author, setting_accesstype, *args):
     reply_func = get_reply_method(call_type)
     access_type = ["set", "read"]
     
