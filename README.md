@@ -1,8 +1,8 @@
-# discord-statistify
+# Statistify - Spotify API wrapped into a Discord Bot
 
 WIP Spotify Statistics Discord Bot utilizing Spotify Web API and Optional Web Scraping
 
-This is a work-in-progress discord that connects with Spotify's Web API to retrieve data about artists, playlist, songs, and many more. Web API Access is built in and requires no premade libraries, however, users will need to create both a Discord Web Application and Spotify Web Application in their respective developer portals for the bot to function. See sections "Preparation" for more info and see section "Library Requirements" to install the required python libraries.
+This is a (mostly) complete discord bot that connects with Spotify's Web API to retrieve data about artists, playlist, songs, and many more. Web API Access is built in and requires no premade libraries, however, users will need to create both a Discord Web Application and Spotify Web Application in their respective developer portals for the bot to function. See sections "Preparation" for more info and see section "Library Requirements" to install the required python libraries.
 
 *This is my first big educational/personal project that integrates API retrieval, Web Scraping and Discord*
 
@@ -10,8 +10,8 @@ This is a work-in-progress discord that connects with Spotify's Web API to retri
 + Custom API Wrapper to Fetch Data from Spotify's Public API
 + Ability to Save each Data on a per user basis
 + Ability to Search for specific Data within Discord
-+ Display Metrics not available on Spotify Player like Audio Features
-+ More to come...
++ Display some Metrics that are not available inn Spotify Player like Audio Features
++ Web Scraper to request Monthly Listener and Playcount using a headless browser
 
 ## Preparation
 Setting up the bot requires two keys, one from Discord Developer Portal, and one from Spotify Web API. Before that, clone this repo.
@@ -74,12 +74,6 @@ Open the bot.py directly or use the included .bat if on Windows.
 + ~Add Web Scraping for Tracks~
 + Clean up & Documentation
 
-## Lib Links 
-* https://pypi.org/project/aiohttp/
-* https://pypi.org/project/discord.py/
-* https://pypi.org/project/python-dotenv/
-* https://pypi.org/project/playwright/
-
 ## A Few Final Notes
 + Bot has majority of functions built but is not yet optimized and is missing some documentation for now.
 + Feel free to contribute any improvements or fork this repo
@@ -93,3 +87,8 @@ This project uses
 + [Discord API](https://discord.com/developers/docs/intro) to access relevant data. These services are used under their respective [Developer Terms of Service](https://developer.spotify.com/terms/) and [Discord Developer Terms of Service](https://discord.com/developers/docs/policies-and-agreements).
 + This project includes web scraping techniques to collect data from public web pages on Spotify. The data collected is solely for **educational and non-commercial purposes** to demonstrate web scraping methodologies.
 
+## Lib Links 
+* https://pypi.org/project/aiohttp/
+* https://pypi.org/project/discord.py/
+* https://pypi.org/project/python-dotenv/
+* https://pypi.org/project/playwright/
