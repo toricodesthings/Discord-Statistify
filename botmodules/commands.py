@@ -1040,21 +1040,15 @@ def extract_items_for_buttons(data, data_type):
 
     items = data[data_type]["items"]
     
-    if data_type == "artists":
-        # Extract Artist Name and ID
-        return [(artist["name"], artist["id"]) for artist in items]
-    
-    elif data_type == "albums":
-        # Extract Album Name and ID
-        return [(album["name"], album["id"]) for album in items]
-    
-    elif data_type == "playlists":
-        # Extract Playlist Name and ID
-        return [(playlist["name"], playlist["id"]) for playlist in items]
-    
-    elif data_type == "tracks":
-        # Extract Track Name and ID
-        return [(track["name"], track["id"]) for track in items]
+    match data_type:
+        case "artists":
+            return [(artist["name"], artist["id"]) for artist in items]
+        case "albums":
+            return [(album["name"], album["id"]) for album in items]
+        case "playlists":
+            return [(playlist["name"], playlist["id"]) for playlist in items]
+        case "tracks":
+            return [(track["name"], track["id"]) for track in items]
     
 #TEMP
 async def search_data(call_type, author, bot, searchinput, data_type, token, reply_func, *args):
