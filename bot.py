@@ -106,7 +106,7 @@ async def on_ready():
         
     print(f"{GREEN}Bot is Ready{RESET}")
         
-def gather_command_argument(command, cmd_func, message, author, bot, access_token, params):
+def gather_command_argument(command, cmd_func, message, author, bot, token, params):
     """
     Gathers and maps arguments to the parameters of a command function.
 
@@ -116,7 +116,7 @@ def gather_command_argument(command, cmd_func, message, author, bot, access_toke
         message (discord.Message): The message object containing the command.
         author (discord.User): The user who issued the command.
         bot (discord.Client): The bot instance.
-        access_token (str): The access token for authorization.
+        token (str): The access token for authorization.
         params (list): The additional parameters passed with the command.
 
     Returns:
@@ -158,6 +158,7 @@ def gather_command_argument(command, cmd_func, message, author, bot, access_toke
                         raise ValueError(f"The command '{command}' is missing a required parameter. See help for details.")
 
     return pass_args
+
 
 @bot.event
 async def on_message(message):
