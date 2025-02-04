@@ -266,13 +266,11 @@ async def generate_list_buttons(author, call_type, allembeds):
 
     
 #Generate Previous and Next Buttons for Get Command - Tracks Module
-async def generate_tracks_get_buttons(author, call_type, allembeds, reply_func, data_name, data_id, data_type):
+async def generate_tracks_get_buttons(author, call_type, embed, reply_func, data_name, data_id, data_type):
     
     view = CustomView()
     
-    if not len(allembeds) > 1:
-        return
-    state = {"current_page": 0}
+    #state = {"current_page": 0}
     msg: None
     
     async def save_button_click(call_type):
@@ -287,7 +285,8 @@ async def generate_tracks_get_buttons(author, call_type, allembeds, reply_func, 
 
         await reply_func(statusmsg)
         await call_type.response.defer()
-
+        
+    """
     async def prev_click(call_type):
         if state["current_page"] > 0:
             state["current_page"] -= 1
@@ -297,27 +296,27 @@ async def generate_tracks_get_buttons(author, call_type, allembeds, reply_func, 
         if state["current_page"] < len(allembeds) - 1:
             state["current_page"] += 1
             await update_embed(call_type)
-    
+    """
     async def update_embed(call_type):
-        prev_button.disabled = state["current_page"] == 0
-        next_button.disabled = state["current_page"] == len(allembeds) - 1
+        #prev_button.disabled = state["current_page"] == 0
+        #next_button.disabled = state["current_page"] == len(allembeds) - 1
         
-        page = int(state["current_page"]) 
-        await view.msg.edit(embed=allembeds[page], view=view)
+        #page = int(state["current_page"]) 
+        await view.msg.edit(embed=embed, view=view)
         await call_type.response.defer()
 
-    prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
-    next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
-    prev_button.disabled = True
-    prev_button.callback = prev_click
-    next_button.callback = next_click
+    #prev_button = Button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
+    #next_button = Button(label="Next ➡️", style=discord.ButtonStyle.primary)
+    #prev_button.disabled = True
+    #prev_button.callback = prev_click
+    #next_button.callback = next_click
     
     save_button = Button(label = "Save", style=discord.ButtonStyle.secondary)
     save_button.callback = save_button_click
     
-    view.add_item(prev_button)
+    #view.add_item(prev_button)
     view.add_item(save_button)
-    view.add_item(next_button)
+    #view.add_item(next_button)
 
     return view
 
@@ -654,83 +653,81 @@ async def fetch_artists(call_type, artist_uri, author, token, reply_func, is_sla
 async def fetch_tracks(call_type, track_uri, author, token, reply_func, dropdown_pathway=False, is_slash_withsaved=False):
     data, response_code_t = await spotifyapi.request_track_info(track_uri, token)
     
-    audio_data, response_code_taf = await spotifyapi.request_track_audiofeatures(track_uri, token)
+    #Audio Data depracated
+    #audio_data, response_code_taf = await spotifyapi.request_track_audiofeatures(track_uri, token)
     
     if data and response_code_t == 200:
         data_name, data_id, data_type = data["name"], data["uri"], "Track"
-        
-        if audio_data and response_code_taf == 200:
-            
-            if SETTINGS["pertrack_scrape"] and not dropdown_pathway:
-                if is_slash_withsaved:
+    
+        if SETTINGS["pertrack_scrape"] and not dropdown_pathway:
+            if is_slash_withsaved:
+                if SETTINGS["pertrack_scrape"]:
+                    content = f"Selected {data_name}. Retrieval of Playcount Data is `On`, response might take some time."
+                else:
+                    content = f"Selected {data_name}."
+                await call_type.edit_original_response(content=content, view=None)
+            else:
+                if isinstance(call_type, discord.Interaction):
                     if SETTINGS["pertrack_scrape"]:
-                        content = f"Selected {data_name}. Retrieval of Playcount Data is `On`, response might take some time."
-                    else:
-                        content = f"Selected {data_name}."
-                    await call_type.edit_original_response(content=content, view=None)
+                        content = "Note: Retrieval of Playcount Data is `On`, response might take some time."
+                        await reply_func(content=content)
                 else:
-                    if isinstance(call_type, discord.Interaction):
-                        if SETTINGS["pertrack_scrape"]:
-                            content = "Note: Retrieval of Playcount Data is `On`, response might take some time."
-                            await reply_func(content=content)
-                    else:
-                        msg = await reply_func(embed=allembeds[0], view=view)
-                        view.set_message(msg)
-                
-                try:
-                    playcount, msg = await scraper.scrape_track_playcount(track_uri)
-                except Exception as e:
-                    playcount, msg = "N/A", None
-                    print(f"Encountered unexpected scraper error {e}")
+                    msg = await reply_func(embed=embed, view=view)
+                    view.set_message(msg)
+            
+            try:
+                playcount, msg = await scraper.scrape_track_playcount(track_uri)
+            except Exception as e:
+                playcount, msg = "N/A", None
+                print(f"Encountered unexpected scraper error {e}")
+        else:
+            playcount, msg = None, None
+        
+        embed = embedder.format_get_track(author, data, playcount, msg)
+        view = await generate_tracks_get_buttons(author, call_type, embed, reply_func,
+                                                    data_name, extract_id(data_id, data_type), "tracks")
+        
+        if SETTINGS["pertrack_scrape"] and not dropdown_pathway:
+            if is_slash_withsaved:
+                msg = await call_type.followup.send(embed=embed, view=view)
+                view.set_message(msg)
             else:
-                playcount, msg = None, None
-            
-            allembeds = embedder.format_get_track(author, data, audio_data, playcount, msg)
-            
-            view = await generate_tracks_get_buttons(author, call_type, allembeds, reply_func,
-                                                     data_name, extract_id(data_id, data_type), "tracks")
-            
-            if SETTINGS["pertrack_scrape"] and not dropdown_pathway:
-                if is_slash_withsaved:
-                    msg = await call_type.followup.send(embed=allembeds[0], view=view)
+                if isinstance(call_type, discord.Interaction):
+                    await reply_func(embed=embed, view=view)
+                    msg = await call_type.original_response()
                     view.set_message(msg)
                 else:
+                    msg = await reply_func(embed=embed, view=view)
+                    view.set_message(msg)
+        else:
+        
+            if is_slash_withsaved:
+                await call_type.edit_original_response(content=f"Selected {data['name']}", view=None)
+                msg = await call_type.followup.send(embed=embed, view=view)
+                view.set_message(msg)
+            else:
+                if not dropdown_pathway:
                     if isinstance(call_type, discord.Interaction):
-                        await reply_func(embed=allembeds[0], view=view)
+                        await reply_func(embed=embed, view=view)
                         msg = await call_type.original_response()
                         view.set_message(msg)
                     else:
-                        msg = await reply_func(embed=allembeds[0], view=view)
+                        msg = await reply_func(embed=embed, view=view)
                         view.set_message(msg)
-            else:
-            
-                if is_slash_withsaved:
-                    await call_type.edit_original_response(content=f"Selected {data['name']}", view=None)
-                    msg = await call_type.followup.send(embed=allembeds[0], view=view)
-                    view.set_message(msg)
                 else:
-                    if not dropdown_pathway:
-                        if isinstance(call_type, discord.Interaction):
-                            await reply_func(embed=allembeds[0], view=view)
-                            msg = await call_type.original_response()
-                            view.set_message(msg)
-                        else:
-                            msg = await reply_func(embed=allembeds[0], view=view)
-                            view.set_message(msg)
-                    else:
-                        msg = await call_type.original_response()
-                        view.set_message(msg)
-                        await msg.edit(embed=allembeds[0], view=view)
-                        
-            return
+                    msg = await call_type.original_response()
+                    view.set_message(msg)
+                    await msg.edit(embed=embed, view=view)
+                    
+        return
         
     # Error Handling 
-    if response_code_t == 400 and response_code_taf == 400:
+    if response_code_t == 400:
         bot_msg = "Invalid artist URI." 
-    elif response_code_t == 404 and response_code_taf == 400:
+    elif response_code_t == 404:
         bot_msg = "Cannot find track, check if you used a track id"    
     else:
-        bot_msg = f"API Requests failed with status codes: {response_code_t} & {response_code_taf}"
+        bot_msg = f"API Requests failed with status codes: {response_code_t}"
     await reply_func(bot_msg)
     
 async def fetch_playlists(call_type, playlist_uri, author, token, reply_func, is_slash_withsaved=False):
@@ -848,10 +845,11 @@ async def help(call_type, author):
         color=discord.Color.green() 
     )
     embed.add_field(name="Main Commands:", value=f"""
-=============================================================
+Each command has a slash variant*
+====================================================
 **`List Artists`** lists all artists saved by user
-Example: `s!list artists`
-=============================================================
+Example: `s!list artists` or
+====================================================
 **`Get Artists`** retrieves artist info by `Spotify ID` or `Saved`
 **`Get Tracks`** retrieves track info by `Spotify ID` or `Saved`
 **`Get Playlists`** retrieves playlist info by `Spotify ID` or `Saved`
@@ -860,19 +858,17 @@ Example: `s!list artists`
 
 By ID Example: `s!get artists [Spotify URL, URI or Direct ID]`
 By Saved: `s!get artists saved` (Follow the prompt after)
-=============================================================
+====================================================
 **`Save Artists`** saves an artist by `Spotify ID`
 **`Save Tracks`** saves an artist by `Spotify ID`
 **`Save Playlists`** saves an artist by `Spotify ID`
 **`Save Albums`** saves an artist by `Spotify ID`
 
 Example: `s!save artists` [Spotify URL, URI or Direct ID]
-=============================================================
+====================================================
 **`Search Artists`** lists all artists saved by user
 Example: `s!search artists Shep`
-=============================================================
-
-All of these commands has a Slash Command variant: `Type / and follow the prompt`
+====================================================
                     """, inline=False)
     embed.add_field(name="Misc Commands", value=f"""
 \n

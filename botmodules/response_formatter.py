@@ -127,7 +127,6 @@ async def format_track_embed(author, response, token):
     Returns:
         tuple: List of Discord embeds and list of tracks with their URIs.
     """
-    embeds = []
     tracks_list = []
     author_avatar_url = author.avatar.url
 
@@ -171,15 +170,13 @@ async def format_track_embed(author, response, token):
         embed.add_field(name="Spotify Album URI", value=f"`{album_uri}`", inline=False)
         embed.add_field(name="Spotify Track URI", value=f"`{track_uri}`", inline=False)
         embed.set_footer(text=f"Requested by {author.display_name}", icon_url=author_avatar_url)
+        
+    return embed, tracks_list
 
-        embeds.append(embed)
-
-    return embeds, tracks_list
-
-
+#Deprecated, unused
 def format_track_audiofeatures(author, response, audiofeatures_response, allembeds):
     """
-    Formats the audio features of a track into a Discord embed.
+    Formats the audio features of a track into a Discord embed. Spotify API has deprecated this feature.
 
     Args:
         author (discord.User): The user requesting the audio features.
@@ -253,7 +250,7 @@ def format_track_audiofeatures(author, response, audiofeatures_response, allembe
 
     return allembeds
 
-def format_get_track(author, response, audiofeatures_response, playcount=None, errormsg=None):
+def format_get_track(author, response, playcount=None, errormsg=None):
     album_name = response['album']['name']
     album_type = response['album']['album_type']
     track_name = response['name']
@@ -290,12 +287,15 @@ def format_get_track(author, response, audiofeatures_response, playcount=None, e
 
     embed.set_footer(text=f"Requested by {author.display_name}", icon_url=avatar_url)
     
-    allembeds = [embed]
 
+    return embed
+    """
     # Adding audio features
     allembeds = format_track_audiofeatures(author, response, audiofeatures_response, allembeds)
     
-    return allembeds
+    """
+
+
 
 def format_get_playlist(author, response):
     # Extracting playlist information
